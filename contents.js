@@ -1,5 +1,20 @@
 const API_KEY = ""; 
 
+/* =====================================================================
+   GOOGLE SIGN-IN SETUP
+   -------------------------------------------------------------------
+   To turn on "Continue with Google":
+   1. Go to https://console.cloud.google.com/apis/credentials
+   2. Create an OAuth 2.0 Client ID (type: "Web application")
+   3. Under "Authorized JavaScript origins", add the exact URL(s) this
+      site will be served from (e.g. https://your-site.com — no
+      trailing slash; add http://localhost:PORT too if testing locally)
+   4. Paste the Client ID below, replacing the placeholder.
+   Until a real Client ID is set, the Google buttons stay hidden and
+   the rest of the login flow (name/place/address) works as before.
+   ===================================================================== */
+const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.googleusercontent.com";
+
 
         
         async function fetchWithBackoff(url, options, maxRetries = 3) {
@@ -177,67 +192,65 @@ const API_KEY = "";
             /* AUTH / LOGIN SYSTEM — Farmer vs Buyer                 */
             /* ===================================================== */
             const AUTH_STORAGE_KEY = 'agriUserProfile';
+            const PRODUCTS_STORAGE_KEY = 'agriProductListings';
+            const NOTIF_STORAGE_KEY = 'agriFarmerNotifications';
+            // Declared early so functions that read it (e.g. renderNotifications, called from
+            // initAuth on page load) never run before it's initialized.
+            let currentLang = 'en';
 
-            const authOverlay = document.getElementById('authOverlay');
-            const appShell = document.getElementById('appShell');
-            const roleSelectionStep = document.getElementById('roleSelection');
-            const farmerFormStep = document.getElementById('farmerForm');
-            const buyerFormStep = document.getElementById('buyerForm');
-            const authSubtitleEl = document.getElementById('authSubtitle');
+            const loginOverlay = document.getElementById('loginOverlay');
+            const roleSelectStep = document.getElementById('roleSelectStep');
+            const farmerLoginForm = document.getElementById('farmerLoginForm');
+            const buyerLoginForm = document.getElementById('buyerLoginForm');
 
-            const chooseFarmerBtn = document.getElementById('chooseFarmer');
-            const chooseBuyerBtn = document.getElementById('chooseBuyer');
+            const chooseFarmerBtn = document.getElementById('chooseFarmerBtn');
+            const chooseBuyerBtn = document.getElementById('chooseBuyerBtn');
+            const backFromFarmerBtn = document.getElementById('backFromFarmerBtn');
+            const backFromBuyerBtn = document.getElementById('backFromBuyerBtn');
 
             const farmerNameInput = document.getElementById('farmerName');
             const farmerPlaceInput = document.getElementById('farmerPlace');
-            const farmerPicInput = document.getElementById('farmerPicInput');
-            const farmerPicPreview = document.getElementById('farmerPicPreview');
-            const farmerPicPlaceholderIcon = document.getElementById('farmerPicPlaceholderIcon');
-            const farmerLoginBtn = document.getElementById('farmerLoginBtn');
+            const farmerPhotoInput = document.getElementById('farmerPhotoInput');
+            const farmerPhotoPreview = document.getElementById('farmerPhotoPreview');
 
             const buyerNameInput = document.getElementById('buyerName');
             const buyerAddressInput = document.getElementById('buyerAddress');
-            const buyerLoginBtn = document.getElementById('buyerLoginBtn');
 
-            const userChipAvatarImg = document.getElementById('userChipAvatarImg');
-            const userChipAvatarIcon = document.getElementById('userChipAvatarIcon');
-            const userChipInfo = document.getElementById('userChipInfo');
+            const profileAvatar = document.getElementById('profileAvatar');
+            const profileNameEl = document.getElementById('profileName');
+            const profileRoleEl = document.getElementById('profileRole');
             const logoutBtn = document.getElementById('logoutBtn');
             const welcomeBannerEl = document.getElementById('welcome-banner');
 
-            let farmerPicDataUrl = '';
+            let farmerPhotoDataUrl = '';
+            let currentUser = null;
+            let pendingGoogleRole = null;
+            let farmerGoogleEmail = '';
+            let buyerGoogleEmail = '';
 
-            function showAuthStep(stepEl) {
-                [roleSelectionStep, farmerFormStep, buyerFormStep].forEach(s => s.classList.remove('active'));
-                stepEl.classList.add('active');
+            function showLoginStep(stepEl) {
+                [roleSelectStep, farmerLoginForm, buyerLoginForm].forEach(s => {
+                    s.style.display = 'none';
+                });
+                stepEl.style.display = (stepEl.tagName === 'FORM') ? 'flex' : 'block';
+                if (stepEl.tagName === 'FORM') {
+                    stepEl.style.flexDirection = 'column';
+                }
             }
 
-            chooseFarmerBtn.addEventListener('click', () => {
-                authSubtitleEl.textContent = "Tell us a little about your farm";
-                showAuthStep(farmerFormStep);
-            });
+            chooseFarmerBtn.addEventListener('click', () => { pendingGoogleRole = 'farmer'; showLoginStep(farmerLoginForm); });
+            chooseBuyerBtn.addEventListener('click', () => { pendingGoogleRole = 'buyer'; showLoginStep(buyerLoginForm); });
+            backFromFarmerBtn.addEventListener('click', () => { pendingGoogleRole = null; showLoginStep(roleSelectStep); });
+            backFromBuyerBtn.addEventListener('click', () => { pendingGoogleRole = null; showLoginStep(roleSelectStep); });
 
-            chooseBuyerBtn.addEventListener('click', () => {
-                authSubtitleEl.textContent = "Tell us where to deliver your order";
-                showAuthStep(buyerFormStep);
-            });
-
-            document.querySelectorAll('[data-auth-back]').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    authSubtitleEl.textContent = "Tell us who you are to get started";
-                    showAuthStep(roleSelectionStep);
-                });
-            });
-
-            farmerPicInput.addEventListener('change', () => {
-                const file = farmerPicInput.files[0];
+            farmerPhotoInput.addEventListener('change', () => {
+                const file = farmerPhotoInput.files[0];
                 if (!file) return;
                 const reader = new FileReader();
                 reader.onload = (e) => {
-                    farmerPicDataUrl = e.target.result;
-                    farmerPicPreview.src = farmerPicDataUrl;
-                    farmerPicPreview.style.display = 'block';
-                    farmerPicPlaceholderIcon.style.display = 'none';
+                    farmerPhotoDataUrl = e.target.result;
+                    farmerPhotoPreview.src = farmerPhotoDataUrl;
+                    farmerPhotoPreview.style.display = 'block';
                 };
                 reader.readAsDataURL(file);
             });
@@ -247,75 +260,84 @@ const API_KEY = "";
                 document.body.classList.add(role === 'farmer' ? 'role-farmer' : 'role-buyer');
             }
 
-            function updateWelcomeAndChip(user) {
+            function initials(name) {
+                return (name || '').trim().split(/\s+/).slice(0, 2).map(w => w[0] ? w[0].toUpperCase() : '').join('');
+            }
+
+            function updateWelcomeAndProfile(user) {
                 if (user.role === 'farmer') {
-                    welcomeBannerEl.innerHTML = `Welcome, ${user.name} <i class="fa-solid fa-seedling"></i>`;
-                    userChipInfo.textContent = `${user.name} · Farmer${user.place ? ', ' + user.place : ''}`;
+                    welcomeBannerEl.innerHTML = `Welcome Farmer ${user.name} <i class="fa-solid fa-seedling"></i>`;
+                    profileRoleEl.textContent = 'Farmer' + (user.place ? ' · ' + user.place : '');
                 } else {
-                    welcomeBannerEl.innerHTML = `Welcome, ${user.name} <i class="fa-solid fa-basket-shopping"></i>`;
-                    userChipInfo.textContent = `${user.name} · Buyer`;
+                    welcomeBannerEl.innerHTML = `Welcome ${user.name} <i class="fa-solid fa-basket-shopping"></i>`;
+                    profileRoleEl.textContent = 'Buyer';
                 }
+                profileNameEl.textContent = user.name;
 
                 if (user.role === 'farmer' && user.profilePic) {
-                    userChipAvatarImg.src = user.profilePic;
-                    userChipAvatarImg.style.display = 'block';
-                    userChipAvatarIcon.style.display = 'none';
+                    profileAvatar.style.backgroundImage = `url(${user.profilePic})`;
+                    profileAvatar.textContent = '';
                 } else {
-                    userChipAvatarImg.style.display = 'none';
-                    userChipAvatarIcon.style.display = 'block';
+                    profileAvatar.style.backgroundImage = '';
+                    profileAvatar.textContent = initials(user.name) || '?';
                 }
             }
 
             function completeLogin(user) {
+                currentUser = user;
                 localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
-                authOverlay.classList.add('hidden');
-                appShell.style.display = 'block';
+                document.body.classList.add('logged-in');
                 document.body.style.overflow = '';
                 applyRoleVisibility(user.role);
-                updateWelcomeAndChip(user);
+                updateWelcomeAndProfile(user);
+                renderProductListings();
+                renderNotifications();
                 showToast(`Welcome ${user.name}! You're logged in as a ${user.role}.`, true);
             }
 
-            farmerLoginBtn.addEventListener('click', () => {
+            farmerLoginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
                 const name = farmerNameInput.value.trim();
                 const place = farmerPlaceInput.value.trim();
                 if (!name || !place) {
                     showToast('Please enter your name and place to continue.', false);
                     return;
                 }
-                completeLogin({ role: 'farmer', name, place, profilePic: farmerPicDataUrl });
+                completeLogin({ role: 'farmer', name, place, profilePic: farmerPhotoDataUrl, email: farmerGoogleEmail });
             });
 
-            buyerLoginBtn.addEventListener('click', () => {
+            buyerLoginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
                 const name = buyerNameInput.value.trim();
                 const address = buyerAddressInput.value.trim();
                 if (!name || !address) {
                     showToast('Please enter your name and address to continue.', false);
                     return;
                 }
-                completeLogin({ role: 'buyer', name, address });
+                completeLogin({ role: 'buyer', name, address, email: buyerGoogleEmail });
             });
 
-            function resetAuthForm() {
-                showAuthStep(roleSelectionStep);
-                authSubtitleEl.textContent = "Tell us who you are to get started";
-                farmerNameInput.value = '';
-                farmerPlaceInput.value = '';
-                buyerNameInput.value = '';
-                buyerAddressInput.value = '';
-                farmerPicDataUrl = '';
-                farmerPicInput.value = '';
-                farmerPicPreview.style.display = 'none';
-                farmerPicPlaceholderIcon.style.display = 'block';
+            function resetLoginForm() {
+                showLoginStep(roleSelectStep);
+                farmerLoginForm.reset();
+                buyerLoginForm.reset();
+                farmerPhotoDataUrl = '';
+                farmerPhotoPreview.style.display = 'none';
+                farmerPhotoPreview.src = '';
+                farmerGoogleEmail = '';
+                buyerGoogleEmail = '';
+                pendingGoogleRole = null;
             }
 
             logoutBtn.addEventListener('click', () => {
                 localStorage.removeItem(AUTH_STORAGE_KEY);
-                appShell.style.display = 'none';
-                authOverlay.classList.remove('hidden');
+                currentUser = null;
+                farmerGoogleEmail = '';
+                buyerGoogleEmail = '';
+                document.body.classList.remove('logged-in', 'role-farmer', 'role-buyer');
                 document.body.style.overflow = 'hidden';
-                document.body.classList.remove('role-farmer', 'role-buyer');
-                resetAuthForm();
+                resetLoginForm();
+                showToast('You have been logged out.', true);
             });
 
             function initAuth() {
@@ -324,22 +346,327 @@ const API_KEY = "";
                     try {
                         const user = JSON.parse(saved);
                         if (user && user.role && user.name) {
-                            authOverlay.classList.add('hidden');
-                            appShell.style.display = 'block';
+                            currentUser = user;
+                            document.body.classList.add('logged-in');
+                            document.body.style.overflow = '';
                             applyRoleVisibility(user.role);
-                            updateWelcomeAndChip(user);
+                            updateWelcomeAndProfile(user);
+                            renderProductListings();
+                            renderNotifications();
                             return;
                         }
                     } catch (e) {
                         console.error('Could not parse saved profile', e);
                     }
                 }
-                // Not logged in yet — keep the auth overlay up and lock background scroll
+                // Not logged in yet — keep the login overlay up and lock background scroll
                 document.body.style.overflow = 'hidden';
             }
 
             initAuth();
             /* ================= END AUTH / LOGIN SYSTEM ================= */
+
+            /* ===================================================== */
+            /* GOOGLE SIGN-IN — "Continue with Google" on login forms */
+            /* ===================================================== */
+            const googleBtnFarmer = document.getElementById('googleBtnFarmer');
+            const googleBtnBuyer = document.getElementById('googleBtnBuyer');
+
+            function decodeGoogleCredential(credential) {
+                const base64Payload = credential.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+                const jsonPayload = decodeURIComponent(
+                    atob(base64Payload).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
+                );
+                return JSON.parse(jsonPayload);
+            }
+
+            function handleGoogleCredentialResponse(response) {
+                let profile;
+                try {
+                    profile = decodeGoogleCredential(response.credential);
+                } catch (err) {
+                    console.error('Google sign-in: could not read credential', err);
+                    showToast('Could not read your Google profile. Please try again or enter your details manually.', false);
+                    return;
+                }
+
+                const { name, email, picture } = profile;
+
+                if (pendingGoogleRole === 'farmer') {
+                    farmerNameInput.value = name || '';
+                    farmerGoogleEmail = email || '';
+                    if (picture) {
+                        farmerPhotoDataUrl = picture;
+                        farmerPhotoPreview.src = picture;
+                        farmerPhotoPreview.style.display = 'block';
+                    }
+                    showToast(`Signed in as ${name} with Google. Add your village to finish.`, true);
+                    farmerPlaceInput.focus();
+                } else if (pendingGoogleRole === 'buyer') {
+                    buyerNameInput.value = name || '';
+                    buyerGoogleEmail = email || '';
+                    showToast(`Signed in as ${name} with Google. Add your address to finish.`, true);
+                    buyerAddressInput.focus();
+                }
+            }
+            window.handleGoogleCredentialResponse = handleGoogleCredentialResponse;
+
+            function initGoogleSignIn(attemptsLeft = 20) {
+                if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID.indexOf('YOUR_GOOGLE_CLIENT_ID') !== -1) {
+                    // No real Client ID configured yet — leave the slots empty.
+                    // (CSS hides the "or continue with Google" divider automatically.)
+                    return;
+                }
+                if (typeof google === 'undefined' || !google.accounts || !google.accounts.id) {
+                    if (attemptsLeft > 0) {
+                        setTimeout(() => initGoogleSignIn(attemptsLeft - 1), 300);
+                    } else {
+                        console.warn('Google Identity Services script did not load — check network access.');
+                    }
+                    return;
+                }
+
+                google.accounts.id.initialize({
+                    client_id: GOOGLE_CLIENT_ID,
+                    callback: handleGoogleCredentialResponse
+                });
+
+                if (googleBtnFarmer) {
+                    google.accounts.id.renderButton(googleBtnFarmer, { theme: 'outline', size: 'large', width: 280, text: 'continue_with' });
+                }
+                if (googleBtnBuyer) {
+                    google.accounts.id.renderButton(googleBtnBuyer, { theme: 'outline', size: 'large', width: 280, text: 'continue_with' });
+                }
+            }
+
+            initGoogleSignIn();
+            /* ================= END GOOGLE SIGN-IN ================= */
+
+            /* ===================================================== */
+            /* PRODUCT LISTINGS — Farmer lists, Buyer browses/buys   */
+            /* ===================================================== */
+            function loadProductListings() {
+                try {
+                    return JSON.parse(localStorage.getItem(PRODUCTS_STORAGE_KEY)) || [];
+                } catch (e) {
+                    return [];
+                }
+            }
+
+            function saveProductListings(products) {
+                localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
+            }
+
+            function addProductListing(name, qty, price, imageDataUrl) {
+                if (!currentUser || currentUser.role !== 'farmer') return;
+                if (!name || isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
+                    showToast(translations[currentLang]['toast-error-fields'], false);
+                    return;
+                }
+                if (!imageDataUrl) {
+                    showToast(translations[currentLang]['toast-error-image'], false);
+                    return;
+                }
+                const products = loadProductListings();
+                products.push({
+                    id: Date.now() + Math.random().toString(16).slice(2),
+                    name,
+                    qty: parseInt(qty),
+                    price: parseFloat(price),
+                    farmerName: currentUser.name,
+                    farmerPlace: currentUser.place || '',
+                    image: imageDataUrl
+                });
+                saveProductListings(products);
+                renderProductListings();
+                showToast(`${name} has been listed for sale!`, true);
+            }
+
+            window.removeProductListing = function (id) {
+                const products = loadProductListings().filter(p => p.id !== id);
+                saveProductListings(products);
+                renderProductListings();
+                showToast('Listing removed.', true);
+            };
+
+            window.buyProductListing = function (id) {
+                const products = loadProductListings();
+                const product = products.find(p => p.id === id);
+                if (!product || product.qty <= 0) return;
+
+                const qtyInput = document.getElementById(`buyQty-${id}`);
+                let requestedQty = qtyInput ? parseInt(qtyInput.value) : 1;
+                if (isNaN(requestedQty) || requestedQty <= 0) requestedQty = 1;
+
+                if (requestedQty > product.qty) {
+                    showToast(translations[currentLang]['toast-sold-out'](product.qty, product.name), false);
+                    return;
+                }
+
+                // Reduce the remaining stock by the quantity bought
+                product.qty -= requestedQty;
+                saveProductListings(products);
+                renderProductListings();
+
+                const buyerName = (currentUser && currentUser.name) ? currentUser.name : 'A buyer';
+                const unitWordEn = requestedQty > 1 ? 'units' : 'unit';
+                addFarmerNotification(
+                    product.farmerName,
+                    `${buyerName} bought ${requestedQty} ${unitWordEn} of your ${product.name}.`,
+                    `${buyerName} ने आपके ${product.name} की ${requestedQty} इकाइयाँ खरीदीं।`
+                );
+
+                addToCart(product.name, requestedQty, product.price, product.id);
+            };
+
+            function renderProductListings() {
+                if (!currentUser) return;
+                const products = loadProductListings();
+
+                const myListingsItems = document.getElementById('myListingsItems');
+                if (myListingsItems) {
+                    const mine = products.filter(p => p.farmerName === currentUser.name);
+                    if (mine.length === 0) {
+                        myListingsItems.innerHTML = `<p>You haven't listed any products yet.</p>`;
+                    } else {
+                        myListingsItems.innerHTML = mine.map(p => `
+                            <div class="listing-item">
+                                <div class="listing-item-content">
+                                    ${p.image ? `<img src="${p.image}" alt="${p.name}" class="listing-item-thumb">` : ''}
+                                    <span><strong>${p.name}</strong> — ${p.qty > 0 ? `${p.qty} units left` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}</span>
+                                </div>
+                                <button class="remove-btn" onclick="removeProductListing('${p.id}')"><i class="fas fa-trash-alt"></i> Remove</button>
+                            </div>
+                        `).join('');
+                    }
+                }
+
+                const availableProductsItems = document.getElementById('availableProductsItems');
+                if (availableProductsItems) {
+                    if (products.length === 0) {
+                        availableProductsItems.innerHTML = `<p>No products listed yet. Check back soon!</p>`;
+                    } else {
+                        availableProductsItems.innerHTML = products.map(p => `
+                            <div class="listing-item">
+                                <div class="listing-item-content">
+                                    ${p.image ? `<img src="${p.image}" alt="${p.name}" class="listing-item-thumb">` : ''}
+                                    <span><strong>${p.name}</strong> — ${p.qty > 0 ? `${p.qty} units available` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}<br>
+                                    <small>Sold by ${p.farmerName}${p.farmerPlace ? ', ' + p.farmerPlace : ''}</small></span>
+                                </div>
+                                ${p.qty > 0 ? `
+                                <div class="buy-controls" style="display:flex;align-items:center;gap:8px;">
+                                    <input type="number" id="buyQty-${p.id}" min="1" max="${p.qty}" value="1" aria-label="Quantity to buy" style="width:60px;padding:6px;border-radius:4px;border:1px solid var(--color-card-border); background: var(--color-card-bg); color: var(--color-text);">
+                                    <button onclick="buyProductListing('${p.id}')"><i class="fas fa-cart-plus"></i> Add to Cart</button>
+                                </div>` : ''}
+                            </div>
+                        `).join('');
+                    }
+                }
+            }
+            /* ================= END PRODUCT LISTINGS ================= */
+
+            /* ===================================================== */
+            /* FARMER NOTIFICATIONS — alert when a buyer buys         */
+            /* ===================================================== */
+            const notifBellContainer = document.getElementById('notifBellContainer');
+            const notifBellBtn = document.getElementById('notifBellBtn');
+            const notifBadge = document.getElementById('notifBadge');
+            const notifDropdown = document.getElementById('notifDropdown');
+
+            function loadNotifications() {
+                try {
+                    return JSON.parse(localStorage.getItem(NOTIF_STORAGE_KEY)) || {};
+                } catch (e) {
+                    return {};
+                }
+            }
+
+            function saveNotifications(data) {
+                localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(data));
+            }
+
+            function addFarmerNotification(farmerName, textEn, textHi) {
+                const all = loadNotifications();
+                if (!all[farmerName]) all[farmerName] = [];
+                all[farmerName].unshift({
+                    id: Date.now() + Math.random().toString(16).slice(2),
+                    en: textEn,
+                    hi: textHi,
+                    time: Date.now(),
+                    read: false
+                });
+                saveNotifications(all);
+                if (currentUser && currentUser.role === 'farmer' && currentUser.name === farmerName) {
+                    renderNotifications();
+                }
+            }
+
+            function timeAgo(ts) {
+                const diff = Math.floor((Date.now() - ts) / 1000);
+                const isHi = currentLang === 'hi';
+                if (diff < 60) return isHi ? 'अभी' : 'just now';
+                if (diff < 3600) { const m = Math.floor(diff / 60); return isHi ? `${m} मिनट पहले` : `${m} min ago`; }
+                if (diff < 86400) { const h = Math.floor(diff / 3600); return isHi ? `${h} घंटे पहले` : `${h} hr ago`; }
+                const d = Math.floor(diff / 86400);
+                return isHi ? `${d} दिन पहले` : `${d} day(s) ago`;
+            }
+
+            function renderNotifications() {
+                if (!notifBellContainer) return;
+                if (!currentUser || currentUser.role !== 'farmer') {
+                    notifBadge.style.display = 'none';
+                    return;
+                }
+                const all = loadNotifications();
+                const mine = all[currentUser.name] || [];
+                const unreadCount = mine.filter(n => !n.read).length;
+
+                notifBadge.textContent = unreadCount > 9 ? '9+' : unreadCount;
+                notifBadge.style.display = unreadCount > 0 ? 'flex' : 'none';
+
+                if (mine.length === 0) {
+                    notifDropdown.innerHTML = `<p class="notif-empty">${currentLang === 'hi' ? 'अभी तक कोई सूचना नहीं।' : 'No notifications yet.'}</p>`;
+                } else {
+                    notifDropdown.innerHTML = mine.map(n => `
+                        <div class="notif-item ${n.read ? '' : 'unread'}">
+                            ${currentLang === 'hi' ? n.hi : n.en}
+                            <span class="notif-time">${timeAgo(n.time)}</span>
+                        </div>
+                    `).join('');
+                }
+            }
+
+            function markFarmerNotificationsRead() {
+                if (!currentUser || currentUser.role !== 'farmer') return;
+                const all = loadNotifications();
+                const mine = all[currentUser.name] || [];
+                if (mine.length === 0) return;
+                mine.forEach(n => n.read = true);
+                all[currentUser.name] = mine;
+                saveNotifications(all);
+            }
+
+            if (notifBellBtn) {
+                notifBellBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const opening = !notifDropdown.classList.contains('open');
+                    notifDropdown.classList.toggle('open');
+                    if (opening) {
+                        renderNotifications();
+                        setTimeout(() => {
+                            markFarmerNotificationsRead();
+                            renderNotifications();
+                        }, 1500);
+                    }
+                });
+                document.addEventListener('click', (e) => {
+                    if (!notifBellContainer.contains(e.target)) {
+                        notifDropdown.classList.remove('open');
+                    }
+                });
+            }
+            /* ================= END FARMER NOTIFICATIONS ================= */
+
 
             let cart = []; 
 
@@ -372,16 +699,27 @@ const API_KEY = "";
                 `;
             }
 
-            function addToCart(name, qty, price) {
+            function addToCart(name, qty, price, productId = null) {
                 if (!name || isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
                     showToast(translations[currentLang]['toast-error-fields'], false);
                     return;
                 }
-                cart.push({ name, qty: parseInt(qty), price: parseFloat(price) });
+                cart.push({ name, qty: parseInt(qty), price: parseFloat(price), productId });
                 showToast(translations[currentLang]['alert-cart-add'](name), true);
                 displayCart();
             }
             window.removeItem = function (index) {
+                const item = cart[index];
+                // Give the stock back to the listing if this item came from a real product listing
+                if (item && item.productId) {
+                    const products = loadProductListings();
+                    const product = products.find(p => p.id === item.productId);
+                    if (product) {
+                        product.qty += item.qty;
+                        saveProductListings(products);
+                        renderProductListings();
+                    }
+                }
                 cart.splice(index, 1);
                 displayCart();
             }
@@ -541,6 +879,11 @@ const API_KEY = "";
                     btn.style.boxShadow = 'none';
                     btn.classList.remove('speaking');
                 });
+                const listenBtn = document.getElementById('techniqueListenBtn');
+                if (listenBtn) {
+                    listenBtn.classList.remove('speaking');
+                    listenBtn.innerHTML = `<i class="fas fa-volume-up"></i> <span id="listenLabel" data-key="listen-label">${(translations[currentLang] && translations[currentLang]['listen-label']) || 'Listen'}</span>`;
+                }
             }
 
             const ttsButtons = document.querySelectorAll('.tts-button');
@@ -653,6 +996,7 @@ const API_KEY = "";
                     'generate-button': 'Generate Description ✨',
                     'listing-placeholder': 'Your professional product description will appear here.',
                     'sell-button': 'Post for Sale',
+                    'sell-image-label': 'Add a Photo of the Vegetable (required) 📷',
                     'cart-title': 'Your Cart',
                     'cart-empty': 'Your cart is empty.',
                     'sec-learning-title': 'Learning Hub',
@@ -687,13 +1031,17 @@ const API_KEY = "";
                     'footer-visits': 'Total Visits: ',
                     'toast-success': 'Message sent successfully! We will contact you soon.',
                     'toast-error-fields': 'Please fill all marketplace fields correctly.',
+                    'toast-error-image': 'Please add a photo of the vegetable (from storage or camera) before selling.',
                     'toast-error-search': 'Please enter a product name to search.',
                     'toast-error-listing': 'Please enter a product name and some key points for the listing generator.',
                     'alert-cart-add': (name) => `${name} added to cart!`,
                     'alert-pay-success': (amount) => `Payment of ₹${amount} successful! Thank you for your purchase.`,
                     'alert-pay-processing': (amount) => `Processing payment of ₹${amount}...`,
                     'alert-search': (name) => `Searching for "${name}" in marketplace...`,
-                    'alert-empty-cart': 'Your cart is empty. Nothing to pay for.'
+                    'alert-empty-cart': 'Your cart is empty. Nothing to pay for.',
+                    'listen-label': 'Listen',
+                    'steps-label': '✍️ Steps to follow:',
+                    'toast-sold-out': (qty, name) => `Only ${qty} units of ${name} are available.`
                 },
                 'hi': {
                     'header-title': 'एग्री दुनिया',
@@ -710,6 +1058,7 @@ const API_KEY = "";
                     'generate-button': 'विवरण बनाएं ✨',
                     'listing-placeholder': 'आपका पेशेवर उत्पाद विवरण यहां दिखाई देगा।',
                     'sell-button': 'बिक्री के लिए पोस्ट करें',
+                    'sell-image-label': 'सब्ज़ी की फोटो जोड़ें (आवश्यक) 📷',
                     'cart-title': 'आपका कार्ट',
                     'cart-empty': 'आपका कार्ट खाली है।',
                     'sec-learning-title': 'सीखने का केंद्र',
@@ -744,16 +1093,18 @@ const API_KEY = "";
                     'footer-visits': 'कुल विज़िट: ',
                     'toast-success': 'संदेश सफलतापूर्वक भेज दिया गया! हम जल्द ही आपसे संपर्क करेंगे।',
                     'toast-error-fields': 'कृपया बाज़ार के सभी फ़ील्ड सही ढंग से भरें।',
+                    'toast-error-image': 'बिक्री से पहले कृपया सब्ज़ी की फोटो जोड़ें (स्टोरेज या कैमरे से)।',
                     'toast-error-search': 'कृपया खोज के लिए उत्पाद का नाम दर्ज करें।',
                     'toast-error-listing': 'कृपया लिस्टिंग जनरेटर के लिए उत्पाद का नाम और कुछ मुख्य बिंदु दर्ज करें।',
                     'alert-cart-add': (name) => `${name} कार्ट में जोड़ा गया!`,
                     'alert-pay-success': (amount) => `₹${amount} का भुगतान सफल रहा! आपकी खरीद के लिए धन्यवाद।`,
                     'alert-pay-processing': (amount) => `₹${amount} का भुगतान संसाधित हो रहा है...`,
-                    'alert-empty-cart': 'आपका कार्ट खाली है। भुगतान करने के लिए कुछ भी नहीं है।'
+                    'alert-empty-cart': 'आपका कार्ट खाली है। भुगतान करने के लिए कुछ भी नहीं है।',
+                    'listen-label': 'सुनें',
+                    'steps-label': '✍️ अपनाए जाने वाले कदम:',
+                    'toast-sold-out': (qty, name) => `${name} की केवल ${qty} इकाइयाँ उपलब्ध हैं।`
                 }
             };
-            
-            let currentLang = 'en';
 
             function applyTranslation(lang) {
                 currentLang = lang;
@@ -770,6 +1121,7 @@ const API_KEY = "";
 
                 
                         displayCart(); 
+                        renderNotifications();
 
                 const initialChatText = lang === 'en' ? "Hello! I'm Agri-Gemini, your AI crop expert. Ask me anything about farming techniques, pests, or market advice." : "नमस्ते! मैं एग्री-जेमिनी, आपका एआई फसल विशेषज्ञ हूँ। मुझसे खेती की तकनीकों, कीटों या बाज़ार सलाह के बारे में कुछ भी पूछें।";
                 const initialChatBubble = document.querySelector('#chatHistory .chat-message.ai .message-bubble');
@@ -787,7 +1139,192 @@ const API_KEY = "";
                 const newLang = currentLang === 'en' ? 'hi' : 'en';
                 localStorage.setItem('language', newLang);
                 applyTranslation(newLang);
+                if (techniqueModal.classList.contains('visible')) {
+                    openTechniqueModal(techniqueModal.getAttribute('data-topic'));
+                }
             });
+
+            /* ===================================================== */
+            /* EASY LEARNING GUIDE MODAL — "Tap to see easy guide"   */
+            /* ===================================================== */
+            const learningGuides = {
+                irrigation: {
+                    courseNum: 1,
+                    emoji: '💧',
+                    diagram: ['🚰', '⚙️', '💧', '🌱'],
+                    steps: [
+                        { icon: '👉', en: 'Check your soil before watering — dig down about 2 inches; only water if it feels dry.', hi: 'पानी देने से पहले मिट्टी जांचें — करीब 2 इंच खोदकर देखें; अगर सूखी लगे तभी पानी दें।' },
+                        { icon: '🚿', en: 'Install drip lines or micro-sprinklers along the crop rows instead of flooding the field.', hi: 'खेत में पानी भरने की जगह फसल की कतारों में ड्रिप लाइन या माइक्रो-स्प्रिंकलर लगाएं।' },
+                        { icon: '⏰', en: 'Water early morning or evening to reduce loss from evaporation.', hi: 'वाष्पीकरण से बचाव के लिए सुबह जल्दी या शाम को पानी दें।' },
+                        { icon: '🔧', en: 'Check pipes and drip emitters every week for leaks or blockages.', hi: 'हर हफ्ते पाइप और ड्रिप एमिटर में रिसाव या रुकावट की जांच करें।' },
+                        { icon: '📊', en: 'Keep a simple weekly note of water used to see how much you are saving.', hi: 'बचत देखने के लिए हर हफ्ते इस्तेमाल हुए पानी का हिसाब रखें।' }
+                    ],
+                    tip: { en: 'Drip irrigation can cut water use by 40–60% compared to flood irrigation, while also improving crop yield.', hi: 'खेत में पानी भरने की तुलना में ड्रिप सिंचाई से 40–60% तक पानी बचता है और फसल की पैदावार भी बढ़ती है।' }
+                },
+                organic: {
+                    courseNum: 2,
+                    emoji: '🌿',
+                    diagram: ['🍂', '🪱', '🌱', '🥦'],
+                    steps: [
+                        { icon: '🍂', en: 'Start a compost pit with crop waste, dry leaves, and cow dung — turn it every 2 weeks.', hi: 'फसल अवशेष, सूखी पत्तियों और गोबर से खाद का गड्ढा बनाएं — हर 2 हफ्ते में पलटें।' },
+                        { icon: '🪱', en: 'Use vermicompost or biofertilizers in place of chemical fertilizers.', hi: 'रासायनिक खाद की जगह वर्मीकम्पोस्ट या जैव-उर्वरक का उपयोग करें।' },
+                        { icon: '🌼', en: 'Rotate crops and try intercropping to keep the soil\'s nutrients balanced.', hi: 'मिट्टी के पोषक तत्व संतुलित रखने के लिए फसल चक्र और अंतर-फसल अपनाएं।' },
+                        { icon: '🐞', en: 'Control pests with neem oil spray or companion planting instead of chemical pesticides.', hi: 'रासायनिक कीटनाशक की जगह नीम के तेल का छिड़काव या साथी-रोपण अपनाएं।' },
+                        { icon: '📜', en: 'Once your field stays chemical-free for the required period, apply for organic certification to sell at better prices.', hi: 'खेत पूरी तरह रसायन-मुक्त होने के बाद बेहतर दाम पाने के लिए ऑर्गेनिक प्रमाणन के लिए आवेदन करें।' }
+                    ],
+                    tip: { en: 'Healthy, organic-rich soil holds more water and needs fewer inputs season after season.', hi: 'जैविक तत्वों से भरपूर स्वस्थ मिट्टी अधिक पानी रोकती है और हर मौसम में कम खाद-दवा की जरूरत पड़ती है।' }
+                },
+                insurance: {
+                    courseNum: 3,
+                    emoji: '🛡️',
+                    diagram: ['🌾', '⚠️', '🛡️', '💰'],
+                    steps: [
+                        { icon: '📝', en: 'Enroll in Pradhan Mantri Fasal Bima Yojana (PMFBY) before the cut-off date for your crop season.', hi: 'अपने फसल सीजन की अंतिम तिथि से पहले प्रधानमंत्री फसल बीमा योजना (PMFBY) में नामांकन करें।' },
+                        { icon: '🏦', en: 'You pay only a small share of the premium — the government covers the rest.', hi: 'आपको प्रीमियम का बहुत छोटा हिस्सा ही देना होता है — बाकी सरकार वहन करती है।' },
+                        { icon: '🌪️', en: 'If your crop is damaged by drought, flood, pests, or disease, report it to your bank or insurer within 72 hours.', hi: 'सूखा, बाढ़, कीट या रोग से फसल खराब होने पर 72 घंटे के अंदर बैंक या बीमा कंपनी को सूचित करें।' },
+                        { icon: '📸', en: 'Take clear photos of the damaged field as proof when you report the loss.', hi: 'नुकसान की सूचना देते समय खराब फसल की स्पष्ट तस्वीरें सबूत के तौर पर लें।' },
+                        { icon: '💵', en: 'After assessment, the claim amount is usually paid directly into your linked bank account.', hi: 'आकलन के बाद दावे की राशि आमतौर पर सीधे आपके जुड़े बैंक खाते में भेजी जाती है।' }
+                    ],
+                    tip: { en: 'Keep your Aadhaar, land records, and bank details updated — mismatched details are the most common reason claims get delayed.', hi: 'अपना आधार, भूमि रिकॉर्ड और बैंक विवरण अपडेट रखें — जानकारी न मिलने से ही ज़्यादातर दावों में देरी होती है।' }
+                },
+                cloud: {
+                    courseNum: 4,
+                    emoji: '☁️',
+                    diagram: ['📱', '☁️', '📊', '🎓'],
+                    steps: [
+                        { icon: '📱', en: 'Use a smartphone or your nearest CSC (Common Service Centre) to access government agri-portals and apps.', hi: 'सरकारी कृषि पोर्टल और ऐप तक पहुंचने के लिए स्मार्टफोन या नज़दीकी CSC (कॉमन सर्विस सेंटर) का उपयोग करें।' },
+                        { icon: '☁️', en: 'Save your soil health reports, insurance papers, and land records online so they are never lost.', hi: 'मिट्टी स्वास्थ्य रिपोर्ट, बीमा कागज़ात और भूमि रिकॉर्ड को ऑनलाइन सुरक्षित रखें ताकि वे कभी न खोएं।' },
+                        { icon: '📊', en: 'Check mandi (market) prices online before deciding when and where to sell your produce.', hi: 'उपज कब और कहां बेचनी है, यह तय करने से पहले मंडी के भाव ऑनलाइन जांच लें।' },
+                        { icon: '🎓', en: 'Watch free e-learning videos and webinars from agricultural universities (KVK) to learn new techniques.', hi: 'नई तकनीकें सीखने के लिए कृषि विश्वविद्यालयों (KVK) के मुफ्त ई-लर्निंग वीडियो और वेबिनार देखें।' },
+                        { icon: '🔔', en: 'Turn on SMS or app alerts for weather warnings and scheme deadlines.', hi: 'मौसम की चेतावनी और योजनाओं की अंतिम तिथि के लिए SMS या ऐप अलर्ट चालू करें।' }
+                    ],
+                    tip: { en: 'A free app like Kisan Suvidha or eNAM puts market prices and weather alerts right in your pocket.', hi: 'किसान सुविधा या ई-नाम जैसे मुफ्त ऐप से बाज़ार भाव और मौसम अलर्ट सीधे आपकी जेब में मिलते हैं।' }
+                }
+            };
+
+            const techniqueOverlay = document.getElementById('techniqueOverlay');
+            const techniqueModal = document.getElementById('techniqueModal');
+            const techniqueEmoji = document.getElementById('techniqueEmoji');
+            const techniqueModalTitle = document.getElementById('techniqueModalTitle');
+            const techniqueDiagram = document.getElementById('techniqueDiagram');
+            const techniqueSteps = document.getElementById('techniqueSteps');
+            const techniqueTip = document.getElementById('techniqueTip');
+            const techniqueListenBtn = document.getElementById('techniqueListenBtn');
+
+            function openTechniqueModal(topic) {
+                const guide = learningGuides[topic];
+                if (!guide) return;
+
+                techniqueEmoji.textContent = guide.emoji;
+                techniqueModalTitle.textContent = translations[currentLang][`course-${guide.courseNum}-title`];
+
+                techniqueDiagram.innerHTML = guide.diagram
+                    .map((node, i) => `<div class="diagram-node">${node}</div>` + (i < guide.diagram.length - 1 ? `<span class="diagram-arrow">→</span>` : ''))
+                    .join('');
+
+                techniqueSteps.innerHTML = guide.steps
+                    .map((step, i) => `
+                        <div class="technique-step">
+                            <span class="step-num">${i + 1}</span>
+                            <span class="step-icon">${step.icon}</span>
+                            <span>${step[currentLang]}</span>
+                        </div>
+                    `).join('');
+
+                techniqueTip.textContent = '💡 ' + guide.tip[currentLang];
+
+                techniqueModal.setAttribute('data-topic', topic);
+                techniqueOverlay.classList.add('visible');
+                techniqueModal.classList.add('visible');
+                document.body.style.overflow = 'hidden';
+            }
+
+            window.closeTechniqueModal = function () {
+                stopPlayback();
+                techniqueOverlay.classList.remove('visible');
+                techniqueModal.classList.remove('visible');
+                document.body.style.overflow = '';
+            };
+
+            document.querySelectorAll('.learning-card').forEach(card => {
+                card.addEventListener('click', () => openTechniqueModal(card.getAttribute('data-topic')));
+                card.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openTechniqueModal(card.getAttribute('data-topic'));
+                    }
+                });
+            });
+
+            techniqueListenBtn.addEventListener('click', async () => {
+                if (techniqueListenBtn.classList.contains('speaking')) {
+                    stopPlayback();
+                    return;
+                } else if (!audioEl.paused) {
+                    stopPlayback();
+                }
+
+                let content = '';
+                techniqueModal.querySelectorAll('h3, .technique-step, .technique-tip').forEach(el => {
+                    content += el.textContent.trim() + '. ';
+                });
+                if (!content) return;
+
+                techniqueListenBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                techniqueListenBtn.classList.add('speaking');
+
+                try {
+                    const langCode = body.getAttribute('lang') === 'hi' ? 'hi-IN' : 'en-US';
+                    const voiceName = langCode === 'hi-IN' ? 'Kore' : 'Zephyr';
+
+                    const TTS_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${API_KEY}`;
+                    const payload = {
+                        contents: [{ parts: [{ text: content }] }],
+                        generationConfig: {
+                            responseModalities: ["AUDIO"],
+                            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceName } } }
+                        }
+                    };
+
+                    const response = await fetchWithBackoff(TTS_API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+                    const part = result?.candidates?.[0]?.content?.parts?.[0];
+                    const audioData = part?.inlineData?.data;
+                    const mimeType = part?.inlineData?.mimeType;
+
+                    if (audioData && mimeType && mimeType.startsWith("audio/")) {
+                        const sampleRateMatch = mimeType.match(/rate=(\d+)/);
+                        const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 16000;
+                        const pcmData = base64ToArrayBuffer(audioData);
+                        const pcm16 = new Int16Array(pcmData);
+                        const wavBlob = pcmToWav(pcm16, sampleRate);
+
+                        if (audioEl.src) URL.revokeObjectURL(audioEl.src);
+
+                        audioEl.src = URL.createObjectURL(wavBlob);
+                        audioEl.play();
+
+                        techniqueListenBtn.innerHTML = '<i class="fas fa-volume-off"></i>';
+
+                        audioEl.onended = () => {
+                            stopPlayback();
+                        };
+                    } else {
+                        showToast("TTS failed: Could not generate audio.", false);
+                        stopPlayback();
+                    }
+                } catch (error) {
+                    console.error("TTS API Error:", error);
+                    showToast("TTS service unavailable. Please try later.", false);
+                    stopPlayback();
+                }
+            });
+            /* ================= END EASY LEARNING GUIDE MODAL ================= */
 
             const contactForm = document.getElementById('contactForm');
 
@@ -808,14 +1345,42 @@ const API_KEY = "";
             const sellButton = document.getElementById('postForSaleBtn');
             const generateListingBtn = document.getElementById('generateListingBtn');
 
+            const sellImageInput = document.getElementById('sellImage');
+            const sellImagePreview = document.getElementById('sellImagePreview');
+            let sellImageDataUrl = '';
+
+            sellImageInput.addEventListener('change', () => {
+                const file = sellImageInput.files[0];
+                if (!file) {
+                    sellImageDataUrl = '';
+                    sellImagePreview.style.display = 'none';
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    sellImageDataUrl = e.target.result;
+                    sellImagePreview.src = sellImageDataUrl;
+                    sellImagePreview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            });
+
             sellButton.addEventListener('click', function () {
                 const name = document.getElementById('sellName').value.trim();
                 const qty = document.getElementById('sellQty').value;
                 const price = document.getElementById('sellPrice').value;
-                addToCart(name, qty, price);
+                if (!sellImageDataUrl) {
+                    showToast(translations[currentLang]['toast-error-image'], false);
+                    return;
+                }
+                addProductListing(name, qty, price, sellImageDataUrl);
                 document.getElementById('sellName').value = "";
                 document.getElementById('sellQty').value = "";
                 document.getElementById('sellPrice').value = "";
+                sellImageInput.value = "";
+                sellImageDataUrl = '';
+                sellImagePreview.style.display = 'none';
+                sellImagePreview.src = '';
             });
 
             async function generateProductDescription(productName, keyPoints) {
@@ -894,15 +1459,37 @@ const API_KEY = "";
             const drawerInstruction = document.getElementById('drawerInstruction');
             const drawerPriceInput = document.getElementById('drawerPrice');
             const drawerActionBtn = document.getElementById('drawerActionBtn');
+            const drawerImageLabel = document.getElementById('drawerImageLabel');
+            const drawerImageInput = document.getElementById('drawerImage');
+            const drawerImagePreview = document.getElementById('drawerImagePreview');
+            let drawerImageDataUrl = '';
+
+            drawerImageInput.addEventListener('change', () => {
+                const file = drawerImageInput.files[0];
+                if (!file) {
+                    drawerImageDataUrl = '';
+                    drawerImagePreview.style.display = 'none';
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    drawerImageDataUrl = e.target.result;
+                    drawerImagePreview.src = drawerImageDataUrl;
+                    drawerImagePreview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            });
 
             function openDrawer(type) {
                 const isBuy = type === 'buy';
                 drawerTitle.textContent = isBuy ? 'Quick Buy Product' : 'Quick Sell Product';
                 drawerInstruction.textContent = isBuy 
                     ? 'Enter the product you want to buy and add it to your cart (mock transaction).'
-                    : 'Enter the product you want to sell and set a price (mock listing).';
+                    : 'Enter the product you want to sell, set a price, and add a photo (mock listing).';
                 
                 drawerPriceInput.style.display = isBuy ? 'none' : 'block';
+                drawerImageLabel.style.display = isBuy ? 'none' : 'block';
+                drawerImageInput.style.display = isBuy ? 'none' : 'block';
                 drawerActionBtn.textContent = isBuy ? 'Add Mock Item to Cart' : 'Post & Add to Cart';
                 drawerActionBtn.setAttribute('data-action', type);
 
@@ -918,6 +1505,10 @@ const API_KEY = "";
                 document.getElementById('drawerName').value = '';
                 document.getElementById('drawerQty').value = '';
                 drawerPriceInput.value = '';
+                drawerImageInput.value = '';
+                drawerImageDataUrl = '';
+                drawerImagePreview.style.display = 'none';
+                drawerImagePreview.src = '';
             }
             
             
@@ -935,17 +1526,22 @@ const API_KEY = "";
                     return;
                 }
 
-                let price = 100; // Default price for mock buy
                 if (type === 'sell') {
-                    price = document.getElementById('drawerPrice').value;
+                    const price = document.getElementById('drawerPrice').value;
                     if (isNaN(price) || parseFloat(price) <= 0) {
                         showToast("Please enter a valid price to sell.", false);
                         return;
                     }
+                    if (!drawerImageDataUrl) {
+                        showToast(translations[currentLang]['toast-error-image'], false);
+                        return;
+                    }
+                    addProductListing(name, qty, price, drawerImageDataUrl);
+                } else {
+                    const price = 100; // Default price for mock buy
+                    addToCart(name, qty, price);
                 }
-                
-                
-                addToCart(name, qty, price);
+
                 closeDrawer();
             });
         });
