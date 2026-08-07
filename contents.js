@@ -1,4 +1,17 @@
-const API_KEY = ""; 
+/* =====================================================================
+   GEMINI CHAT / TTS — via Firebase Cloud Function proxy
+   -------------------------------------------------------------------
+   The Gemini API key is NOT stored in this file — it lives server-side
+   as a Firebase secret (see functions/index.js). This file only calls
+   your deployed Cloud Function URLs, which forward the request to
+   Gemini using the hidden key.
+
+   After running `firebase deploy --only functions`, Firebase prints
+   two URLs (one per function). Paste them below.
+   Example: https://us-central1-agri-dunia.cloudfunctions.net/geminiChat
+   ===================================================================== */
+const CHAT_PROXY_URL = "https://us-central1-agri-dunia.cloudfunctions.net/geminiChat";
+const TTS_PROXY_URL = "https://us-central1-agri-dunia.cloudfunctions.net/geminiTts";
 
 /* =====================================================================
    GOOGLE SIGN-IN SETUP
@@ -82,7 +95,9 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             return new Blob([buffer], { type: 'audio/wav' });
         }
         const AGRI_GEMINI_MODEL = 'gemini-2.5-flash-preview-09-2025';
-        const CHAT_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${AGRI_GEMINI_MODEL}:generateContent?key=${API_KEY}`;
+        // Chat now goes through the Cloud Function proxy (see CHAT_PROXY_URL above)
+        // instead of calling Google directly with a client-side key.
+        const CHAT_API_URL = CHAT_PROXY_URL;
         
         let chatHistory = [{
             role: "user", 
@@ -194,22 +209,43 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             const AUTH_STORAGE_KEY = 'agriUserProfile';
             const PRODUCTS_STORAGE_KEY = 'agriProductListings';
             const NOTIF_STORAGE_KEY = 'agriFarmerNotifications';
-            const FARMER_ID_KEY = 'agriFarmerDeviceId';
             // Declared early so functions that read it (e.g. renderNotifications, called from
             // initAuth on page load) never run before it's initialized.
             let currentLang = 'en';
 
-            // A stable ID for "this farmer on this device", so listings stay tied to the
-            // farmer even if they retype their name slightly differently on a later login
-            // (different capitalization, extra space, etc). Persists across logout/login.
-            function getOrCreateFarmerId() {
-                let id = localStorage.getItem(FARMER_ID_KEY);
-                if (!id) {
-                    id = 'f_' + Date.now() + '_' + Math.random().toString(16).slice(2);
-                    localStorage.setItem(FARMER_ID_KEY, id);
-                }
-                return id;
-            }
+            /* ===================================================== */
+            /* LANGUAGE CONFIG — English, Hindi, Tamil, Telugu, Bengali */
+            /* ===================================================== */
+            const SUPPORTED_LANGS = ['en', 'hi', 'ta', 'te', 'bn'];
+            const LANG_LABELS = { en: 'English', hi: 'हिन्दी', ta: 'தமிழ்', te: 'తెలుగు', bn: 'বাংলা' };
+            const INITIAL_CHAT_TEXT = {
+                en: "Hello! I'm Agri-Gemini, your AI crop expert. Ask me anything about farming techniques, pests, or market advice.",
+                hi: "नमस्ते! मैं एग्री-जेमिनी, आपका एआई फसल विशेषज्ञ हूँ। मुझसे खेती की तकनीकों, कीटों या बाज़ार सलाह के बारे में कुछ भी पूछें।",
+                ta: "வணக்கம்! நான் அக்ரி-ஜெமினி, உங்கள் AI பயிர் நிபுணர். விவசாய நுட்பங்கள், பூச்சிகள் அல்லது சந்தை ஆலோசனை பற்றி என்னிடம் எதுவும் கேளுங்கள்.",
+                te: "నమస్కారం! నేను అగ్రి-జెమిని, మీ AI పంట నిపుణుడిని. వ్యవసాయ పద్ధతులు, చీడపీడలు లేదా మార్కెట్ సలహా గురించి నన్ను ఏదైనా అడగండి.",
+                bn: "নমস্কার! আমি অ্যাগ্রি-জেমিনি, আপনার AI ফসল বিশেষজ্ঞ। কৃষি পদ্ধতি, পোকামাকড় বা বাজারের পরামর্শ নিয়ে আমাকে যেকোনো কিছু জিজ্ঞাসা করুন।"
+            };
+            const NOTIF_EMPTY_TEXT = {
+                en: 'No notifications yet.',
+                hi: 'अभी तक कोई सूचना नहीं।',
+                ta: 'இதுவரை அறிவிப்புகள் இல்லை.',
+                te: 'ఇంకా నోటిఫికేషన్‌లు లేవు.',
+                bn: 'এখনও কোনো বিজ্ঞপ্তি নেই।'
+            };
+            const TIME_AGO_TEXT = {
+                en: { justNow: 'just now', min: (m) => `${m} min ago`, hr: (h) => `${h} hr ago`, day: (d) => `${d} day(s) ago` },
+                hi: { justNow: 'अभी', min: (m) => `${m} मिनट पहले`, hr: (h) => `${h} घंटे पहले`, day: (d) => `${d} दिन पहले` },
+                ta: { justNow: 'இப்போது', min: (m) => `${m} நிமிடங்களுக்கு முன்`, hr: (h) => `${h} மணி நேரத்திற்கு முன்`, day: (d) => `${d} நாட்களுக்கு முன்` },
+                te: { justNow: 'ఇప్పుడే', min: (m) => `${m} నిమిషాల క్రితం`, hr: (h) => `${h} గంటల క్రితం`, day: (d) => `${d} రోజుల క్రితం` },
+                bn: { justNow: 'এইমাত্র', min: (m) => `${m} মিনিট আগে`, hr: (h) => `${h} ঘণ্টা আগে`, day: (d) => `${d} দিন আগে` }
+            };
+            const TTS_LANG_CONFIG = {
+                en: { code: 'en-US', voice: 'Zephyr' },
+                hi: { code: 'hi-IN', voice: 'Kore' },
+                ta: { code: 'ta-IN', voice: 'Puck' },
+                te: { code: 'te-IN', voice: 'Charon' },
+                bn: { code: 'bn-IN', voice: 'Fenrir' }
+            };
 
             const loginOverlay = document.getElementById('loginOverlay');
             const roleSelectStep = document.getElementById('roleSelectStep');
@@ -237,8 +273,6 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
 
             let farmerPhotoDataUrl = '';
             let currentUser = null;
-            // Latest product listings synced from Firestore (see firebase-init.js).
-            let cachedProducts = [];
             let pendingGoogleRole = null;
             let farmerGoogleEmail = '';
             let buyerGoogleEmail = '';
@@ -461,21 +495,15 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             /* PRODUCT LISTINGS — Farmer lists, Buyer browses/buys   */
             /* ===================================================== */
             function loadProductListings() {
-                // Product listings now live in Firestore (shared across every
-                // device) via firebase-init.js. cachedProducts always holds
-                // the most recent synced snapshot; this getter just exposes
-                // it under the old name so the rest of the code is unchanged.
-                return cachedProducts;
+                try {
+                    return JSON.parse(localStorage.getItem(PRODUCTS_STORAGE_KEY)) || [];
+                } catch (e) {
+                    return [];
+                }
             }
 
-            window.onProductsUpdated = function (products) {
-                cachedProducts = products;
-                renderProductListings();
-            };
-            // In case Firestore's first snapshot arrived before this page's
-            // script finished loading, pick up whatever was already synced.
-            if (window.__agriLatestProducts && window.__agriLatestProducts.length) {
-                cachedProducts = window.__agriLatestProducts;
+            function saveProductListings(products) {
+                localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
             }
 
             // Farmers may only list products under these fixed categories.
@@ -487,7 +515,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 'Tools': '🛠️'
             };
 
-            async function addProductListing(name, qty, price, imageDataUrl, category) {
+            function addProductListing(name, qty, price, imageDataUrl, category) {
                 if (!currentUser || currentUser.role !== 'farmer') return;
                 if (!name || isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
                     showToast(translations[currentLang]['toast-error-fields'], false);
@@ -501,41 +529,32 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     showToast(translations[currentLang]['toast-error-image'], false);
                     return;
                 }
-                if (typeof window.fbAddProduct !== 'function') {
-                    showToast('Marketplace sync is still connecting. Please try again in a moment.', false);
-                    return;
-                }
-                try {
-                    await window.fbAddProduct({
-                        name,
-                        qty: parseInt(qty),
-                        price: parseFloat(price),
-                        farmerName: currentUser.name,
-                        farmerPlace: currentUser.place || '',
-                        farmerId: getOrCreateFarmerId(),
-                        image: imageDataUrl,
-                        category
-                    });
-                    showToast(`${name} has been listed for sale!`, true);
-                } catch (err) {
-                    console.error('Failed to add product listing:', err);
-                    showToast('Could not post listing. Check your connection and try again.', false);
-                }
+                const products = loadProductListings();
+                products.push({
+                    id: Date.now() + Math.random().toString(16).slice(2),
+                    name,
+                    qty: parseInt(qty),
+                    price: parseFloat(price),
+                    farmerName: currentUser.name,
+                    farmerPlace: currentUser.place || '',
+                    image: imageDataUrl,
+                    category
+                });
+                saveProductListings(products);
+                renderProductListings();
+                showToast(`${name} has been listed for sale!`, true);
             }
 
-            window.removeProductListing = async function (id) {
-                if (typeof window.fbRemoveProduct !== 'function') return;
-                try {
-                    await window.fbRemoveProduct(id);
-                    showToast('Listing removed.', true);
-                } catch (err) {
-                    console.error('Failed to remove listing:', err);
-                    showToast('Could not remove listing. Check your connection and try again.', false);
-                }
+            window.removeProductListing = function (id) {
+                const products = loadProductListings().filter(p => p.id !== id);
+                saveProductListings(products);
+                renderProductListings();
+                showToast('Listing removed.', true);
             };
 
-            window.buyProductListing = async function (id) {
-                const product = cachedProducts.find(p => p.id === id);
+            window.buyProductListing = function (id) {
+                const products = loadProductListings();
+                const product = products.find(p => p.id === id);
                 if (!product || product.qty <= 0) return;
 
                 const qtyInput = document.getElementById(`buyQty-${id}`);
@@ -547,18 +566,10 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     return;
                 }
 
-                if (typeof window.fbUpdateProductQty !== 'function') {
-                    showToast('Marketplace sync is still connecting. Please try again in a moment.', false);
-                    return;
-                }
-
-                try {
-                    await window.fbUpdateProductQty(id, product.qty - requestedQty);
-                } catch (err) {
-                    console.error('Failed to update stock:', err);
-                    showToast('Could not complete purchase. Check your connection and try again.', false);
-                    return;
-                }
+                // Reduce the remaining stock by the quantity bought
+                product.qty -= requestedQty;
+                saveProductListings(products);
+                renderProductListings();
 
                 const buyerName = (currentUser && currentUser.name) ? currentUser.name : 'A buyer';
                 const unitWordEn = requestedQty > 1 ? 'units' : 'unit';
@@ -577,8 +588,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
 
                 const myListingsItems = document.getElementById('myListingsItems');
                 if (myListingsItems) {
-                    const myFarmerId = getOrCreateFarmerId();
-                    const mine = products.filter(p => p.farmerId ? p.farmerId === myFarmerId : p.farmerName === currentUser.name);
+                    const mine = products.filter(p => p.farmerName === currentUser.name);
                     if (mine.length === 0) {
                         myListingsItems.innerHTML = `<p>You haven't listed any products yet.</p>`;
                     } else {
@@ -638,13 +648,12 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(data));
             }
 
-            function addFarmerNotification(farmerName, textEn, textHi) {
+            function addFarmerNotification(farmerName, textByLang) {
                 const all = loadNotifications();
                 if (!all[farmerName]) all[farmerName] = [];
                 all[farmerName].unshift({
                     id: Date.now() + Math.random().toString(16).slice(2),
-                    en: textEn,
-                    hi: textHi,
+                    ...textByLang,
                     time: Date.now(),
                     read: false
                 });
@@ -656,12 +665,11 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
 
             function timeAgo(ts) {
                 const diff = Math.floor((Date.now() - ts) / 1000);
-                const isHi = currentLang === 'hi';
-                if (diff < 60) return isHi ? 'अभी' : 'just now';
-                if (diff < 3600) { const m = Math.floor(diff / 60); return isHi ? `${m} मिनट पहले` : `${m} min ago`; }
-                if (diff < 86400) { const h = Math.floor(diff / 3600); return isHi ? `${h} घंटे पहले` : `${h} hr ago`; }
-                const d = Math.floor(diff / 86400);
-                return isHi ? `${d} दिन पहले` : `${d} day(s) ago`;
+                const t = TIME_AGO_TEXT[currentLang] || TIME_AGO_TEXT.en;
+                if (diff < 60) return t.justNow;
+                if (diff < 3600) return t.min(Math.floor(diff / 60));
+                if (diff < 86400) return t.hr(Math.floor(diff / 3600));
+                return t.day(Math.floor(diff / 86400));
             }
 
             function renderNotifications() {
@@ -678,11 +686,11 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 notifBadge.style.display = unreadCount > 0 ? 'flex' : 'none';
 
                 if (mine.length === 0) {
-                    notifDropdown.innerHTML = `<p class="notif-empty">${currentLang === 'hi' ? 'अभी तक कोई सूचना नहीं।' : 'No notifications yet.'}</p>`;
+                    notifDropdown.innerHTML = `<p class="notif-empty">${NOTIF_EMPTY_TEXT[currentLang] || NOTIF_EMPTY_TEXT.en}</p>`;
                 } else {
                     notifDropdown.innerHTML = mine.map(n => `
                         <div class="notif-item ${n.read ? '' : 'unread'}">
-                            ${currentLang === 'hi' ? n.hi : n.en}
+                            ${n[currentLang] || n.en}
                             <span class="notif-time">${timeAgo(n.time)}</span>
                         </div>
                     `).join('');
@@ -971,27 +979,17 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
 
                     try {
                         // --- Language selection for TTS ---
-                        const langCode = body.getAttribute('lang') === 'hi' ? 'hi-IN' : 'en-US';
+                        const ttsConfig = TTS_LANG_CONFIG[body.getAttribute('lang')] || TTS_LANG_CONFIG.en;
+                        const langCode = ttsConfig.code;
                         // Using different voices for immersion/variety
-                        const voiceName = langCode === 'hi-IN' ? 'Kore' : 'Zephyr'; 
+                        const voiceName = ttsConfig.voice;
                         // --- End Language selection for TTS ---
-                        
-                        const TTS_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${API_KEY}`;
-                        const payload = {
-                            contents: [{
-                                parts: [{ text: content }]
-                            }],
-                            generationConfig: {
-                                responseModalities: ["AUDIO"],
-                                speechConfig: {
-                                    voiceConfig: {
-                                        prebuiltVoiceConfig: { voiceName: voiceName }
-                                    }
-                                }
-                            }
-                        };
 
-                        const response = await fetchWithBackoff(TTS_API_URL, {
+                        // TTS now goes through the Cloud Function proxy — it holds the
+                        // Gemini key server-side and builds the full request itself.
+                        const payload = { text: content, voiceName: voiceName };
+
+                        const response = await fetchWithBackoff(TTS_PROXY_URL, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(payload)
@@ -1071,16 +1069,11 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     'sec-video-p': 'Watch these helpful videos on crop cultivation, soil health, and modern farming practices.',
                     'sec-scheme-title': 'Government Schemes for Farmers',
                     'sec-scheme-p': 'Here are some important government schemes designed to support farmers. Click on the links to learn more and apply:',
-                    'scheme-1-title': 'Pradhan Mantri Kisan Samman Nidhi (PM-KISAN)',
-                    'scheme-1-desc': 'Direct income support of ₹6,000 annually to farmers.',
-                    'scheme-2-title': 'Pradhan Mantri Fasal Bima Yojana (PMFBY)',
-                    'scheme-2-desc': 'Crop insurance for farmers against natural calamities.',
-                    'scheme-3-title': 'Soil Health Card Scheme',
-                    'scheme-3-desc': 'Provides farmers with soil health reports and recommendations.',
-                    'scheme-4-title': 'Agriculture Infrastructure Fund (AIF)',
-                    'scheme-4-desc': 'Financial support for developing agricultural infrastructure.',
-                    'scheme-5-title': 'National Agriculture Market (eNAM)',
-                    'scheme-5-desc': 'Online trading platform for farmers to sell their produce.',
+                    'scheme-1-desc': 'Pradhan Mantri Kisan Samman Nidhi (PM-KISAN) – Direct income support of ₹6,000 annually to farmers.',
+                    'scheme-2-desc': 'Pradhan Mantri Fasal Bima Yojana (PMFBY) – Crop insurance for farmers against natural calamities.',
+                    'scheme-3-desc': 'Soil Health Card Scheme – Provides farmers with soil health reports and recommendations.',
+                    'scheme-4-desc': 'Agriculture Infrastructure Fund (AIF) – Financial support for developing agricultural infrastructure.',
+                    'scheme-5-desc': 'National Agriculture Market (eNAM) – Online trading platform for farmers to sell their produce.',
                     'sec-contact-title': 'Contact Us',
                     'contact-info-1': 'Email: support@farmerplatform.in',
                     'contact-info-2': 'Helpline: +91 7393953233',
@@ -1141,16 +1134,11 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     'sec-video-p': 'फसल की खेती, मिट्टी के स्वास्थ्य और आधुनिक कृषि पद्धतियों पर ये सहायक वीडियो देखें।',
                     'sec-scheme-title': 'किसानों के लिए सरकारी योजनाएँ',
                     'sec-scheme-p': 'यहां किसानों का समर्थन करने के लिए डिज़ाइन की गई कुछ महत्वपूर्ण सरकारी योजनाएँ दी गई हैं। अधिक जानने और आवेदन करने के लिए लिंक पर क्लिक करें:',
-                    'scheme-1-title': 'प्रधान मंत्री किसान सम्मान निधि (पीएम-किसान)',
-                    'scheme-1-desc': 'किसानों को सालाना ₹6,000 का सीधा आय समर्थन।',
-                    'scheme-2-title': 'प्रधान मंत्री फसल बीमा योजना (पीएमएफबीवाई)',
-                    'scheme-2-desc': 'प्राकृतिक आपदाओं के खिलाफ किसानों के लिए फसल बीमा।',
-                    'scheme-3-title': 'मृदा स्वास्थ्य कार्ड योजना',
-                    'scheme-3-desc': 'किसानों को मिट्टी के स्वास्थ्य की रिपोर्ट और सिफारिशें प्रदान करती है।',
-                    'scheme-4-title': 'कृषि अवसंरचना कोष (एआईएफ)',
-                    'scheme-4-desc': 'कृषि अवसंरचना के विकास के लिए वित्तीय सहायता।',
-                    'scheme-5-title': 'राष्ट्रीय कृषि बाजार (ई-नाम)',
-                    'scheme-5-desc': 'किसानों को अपनी उपज बेचने के लिए ऑनलाइन ट्रेडिंग प्लेटफॉर्म।',
+                    'scheme-1-desc': 'प्रधान मंत्री किसान सम्मान निधि (पीएम-किसान) – किसानों को सालाना ₹6,000 का सीधा आय समर्थन।',
+                    'scheme-2-desc': 'प्रधान मंत्री फसल बीमा योजना (पीएमएफबीवाई) – प्राकृतिक आपदाओं के खिलाफ किसानों के लिए फसल बीमा।',
+                    'scheme-3-desc': 'मृदा स्वास्थ्य कार्ड योजना – किसानों को मिट्टी के स्वास्थ्य की रिपोर्ट और सिफारिशें प्रदान करती है।',
+                    'scheme-4-desc': 'कृषि अवसंरचना कोष (एआईएफ) – कृषि अवसंरचना के विकास के लिए वित्तीय सहायता।',
+                    'scheme-5-desc': 'राष्ट्रीय कृषि बाजार (ई-नाम) – किसानों को अपनी उपज बेचने के लिए ऑनलाइन ट्रेडिंग प्लेटफॉर्म।',
                     'sec-contact-title': 'हमसे संपर्क करें',
                     'contact-info-1': 'ईमेल: support@farmerplatform.in',
                     'contact-info-2': 'हेल्पलाइन: +91 7393953233',
@@ -1168,21 +1156,219 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     'alert-cart-add': (name) => `${name} कार्ट में जोड़ा गया!`,
                     'alert-pay-success': (amount) => `₹${amount} का भुगतान सफल रहा! आपकी खरीद के लिए धन्यवाद।`,
                     'alert-pay-processing': (amount) => `₹${amount} का भुगतान संसाधित हो रहा है...`,
+                    'alert-search': (name) => `बाज़ार में "${name}" खोजा जा रहा है...`,
                     'alert-empty-cart': 'आपका कार्ट खाली है। भुगतान करने के लिए कुछ भी नहीं है।',
                     'listen-label': 'सुनें',
                     'steps-label': '✍️ अपनाए जाने वाले कदम:',
                     'toast-sold-out': (qty, name) => `${name} की केवल ${qty} इकाइयाँ उपलब्ध हैं।`
+                },
+                'ta': {
+                    'header-title': 'அக்ரி துனியா',
+                    'header-tagline': 'சந்தை, அறிவு மற்றும் அரசு திட்டங்களுக்கான டிஜிட்டல் அணுகலுடன் விவசாயிகளை மேம்படுத்துதல்',
+                    'nav-market': 'சந்தை',
+                    'nav-learning': 'கற்றல் மையம்',
+                    'nav-videos': 'வீடியோக்கள்',
+                    'nav-schemes': 'திட்டங்கள்',
+                    'nav-contact': 'தொடர்பு',
+                    'sec-market-title': 'டிஜிட்டல் சந்தை',
+                    'sec-market-p': 'விவசாய பொருட்களை நேரடியாக வாங்கவும் விற்கவும். விவசாயிகள் தங்கள் பயிர்களை பட்டியலிடலாம், வாங்குபவர்கள் நேரடியாக வாங்கலாம், இது நியாயமான வர்த்தகத்தை உறுதி செய்யும்.',
+                    'sell-title': 'உங்கள் பொருட்களை விற்கவும்',
+                    'sell-button': 'விற்பனைக்கு இடுங்கள்',
+                    'sell-category-label': 'பொருள் வகை (அவசியம்)',
+                    'category-option-default': '-- வகையை தேர்ந்தெடுக்கவும் --',
+                    'category-option-vegetables': '🥦 காய்கறிகள்',
+                    'category-option-fruits': '🍎 பழங்கள்',
+                    'category-option-seeds': '🌱 விதைகள்',
+                    'category-option-tools': '🛠️ கருவிகள்',
+                    'sell-image-label': 'பொருளின் புகைப்படத்தை சேர்க்கவும் (அவசியம்) 📷',
+                    'cart-title': 'உங்கள் கார்ட்',
+                    'cart-empty': 'உங்கள் கார்ட் காலியாக உள்ளது.',
+                    'sec-learning-title': 'கற்றல் மையம்',
+                    'sec-learning-p': 'எங்கள் தளத்தின் மூலம் நவீன விவசாய நுட்பங்கள், உற்பத்தி மேம்பாடு மற்றும் பயிர் மேலாண்மையை கற்றுக்கொள்ளுங்கள்.',
+                    'course-1-title': 'நவீன நீர்ப்பாசன நுட்பங்கள்',
+                    'course-1-desc': 'சொட்டு மற்றும் தெளிப்பு முறைகள் மூலம் நீர் பயன்பாட்டை மேம்படுத்துங்கள். சிறந்த நீர் மேலாண்மையை கற்றுக்கொள்ளுங்கள்.',
+                    'course-2-title': 'இயற்கை வேளாண்மை',
+                    'course-2-desc': 'இயற்கை, ரசாயனமற்ற சாகுபடி மற்றும் மண் வளப்படுத்தும் நுட்பங்களில் தேர்ச்சி பெறுங்கள்.',
+                    'course-3-title': 'பயிர் காப்பீடு விழிப்புணர்வு',
+                    'course-3-desc': 'உங்கள் அறுவடையை ஆபத்துகளிலிருந்து பாதுகாக்க கொள்கை விவரங்கள் மற்றும் உரிமைகோரல் செயல்முறையை புரிந்துகொள்ளுங்கள்.',
+                    'course-4-title': 'கிளவுட் ஒருங்கிணைப்பு மற்றும் இ-கற்றல்',
+                    'course-4-desc': 'தரவு மேலாண்மை மற்றும் டிஜிட்டல் வேளாண் வளங்களை அணுக கிளவுட் கருவிகளைப் பயன்படுத்துங்கள்.',
+                    'ai-chat-title': '✨ அக்ரி-ஜெமினி: உடனடி பயிர் ஆலோசகர்',
+                    'ai-desc': 'விவசாய நுட்பங்கள், சந்தை போக்குகள் அல்லது பூச்சி மேலாண்மை பற்றி என்னிடம் எதுவும் கேளுங்கள்!',
+                    'sec-video-title': 'விவசாயிகளுக்கான வீடியோக்கள்',
+                    'sec-video-p': 'பயிர் சாகுபடி, மண் ஆரோக்கியம் மற்றும் நவீன விவசாய நடைமுறைகள் குறித்த இந்த பயனுள்ள வீடியோக்களைப் பாருங்கள்.',
+                    'sec-scheme-title': 'விவசாயிகளுக்கான அரசு திட்டங்கள்',
+                    'sec-scheme-p': 'விவசாயிகளுக்கு உதவும் வகையில் வடிவமைக்கப்பட்ட சில முக்கிய அரசு திட்டங்கள் இங்கே உள்ளன. மேலும் அறியவும் விண்ணப்பிக்கவும் இணைப்புகளை கிளிக் செய்யவும்:',
+                    'scheme-1-desc': 'பிரதான் மந்திரி கிசான் சம்மான் நிதி (PM-KISAN) – விவசாயிகளுக்கு ஆண்டுதோறும் ₹6,000 நேரடி வருமான உதவி.',
+                    'scheme-2-desc': 'பிரதான் மந்திரி பசல் பீமா யோஜனா (PMFBY) – இயற்கை பேரிடர்களுக்கு எதிராக விவசாயிகளுக்கான பயிர் காப்பீடு.',
+                    'scheme-3-desc': 'மண் ஆரோக்கிய அட்டை திட்டம் – விவசாயிகளுக்கு மண் ஆரோக்கிய அறிக்கைகள் மற்றும் பரிந்துரைகளை வழங்குகிறது.',
+                    'scheme-4-desc': 'வேளாண் உள்கட்டமைப்பு நிதி (AIF) – வேளாண் உள்கட்டமைப்பை மேம்படுத்த நிதி உதவி.',
+                    'scheme-5-desc': 'தேசிய வேளாண் சந்தை (eNAM) – விவசாயிகள் தங்கள் விளைபொருட்களை விற்க ஆன்லைன் வர்த்தக தளம்.',
+                    'sec-contact-title': 'எங்களை தொடர்பு கொள்ளுங்கள்',
+                    'contact-info-1': 'மின்னஞ்சல்: support@farmerplatform.in',
+                    'contact-info-2': 'உதவி எண்: +91 7393953233',
+                    'form-label-name': 'பெயர்',
+                    'form-label-email': 'மின்னஞ்சல்',
+                    'form-label-message': 'செய்தி',
+                    'form-button-send': 'செய்தி அனுப்பவும்',
+                    'footer-copyright': '© 2025 டிஜிட்டல் சந்தை & விவசாயிகளுக்கான கற்றல் தளம் | அனைத்து உரிமைகளும் பாதுகாக்கப்பட்டவை',
+                    'footer-visits': 'மொத்த வருகைகள்: ',
+                    'toast-success': 'செய்தி வெற்றிகரமாக அனுப்பப்பட்டது! நாங்கள் விரைவில் உங்களை தொடர்பு கொள்வோம்.',
+                    'toast-error-fields': 'சந்தை புலங்கள் அனைத்தையும் சரியாக நிரப்பவும்.',
+                    'toast-error-image': 'விற்பனைக்கு முன் பொருளின் புகைப்படத்தை (சேமிப்பு அல்லது கேமராவிலிருந்து) சேர்க்கவும்.',
+                    'toast-error-category': 'ஒரு வகையை தேர்ந்தெடுக்கவும்: காய்கறிகள், பழங்கள், விதைகள் அல்லது கருவிகள்.',
+                    'toast-error-search': 'தேட பொருளின் பெயரை உள்ளிடவும்.',
+                    'alert-cart-add': (name) => `${name} கார்ட்டில் சேர்க்கப்பட்டது!`,
+                    'alert-pay-success': (amount) => `₹${amount} கட்டணம் வெற்றிகரமாக செலுத்தப்பட்டது! உங்கள் வாங்குதலுக்கு நன்றி.`,
+                    'alert-pay-processing': (amount) => `₹${amount} கட்டணம் செயலாக்கப்படுகிறது...`,
+                    'alert-search': (name) => `"${name}" சந்தையில் தேடப்படுகிறது...`,
+                    'alert-empty-cart': 'உங்கள் கார்ட் காலியாக உள்ளது. செலுத்த எதுவும் இல்லை.',
+                    'listen-label': 'கேளுங்கள்',
+                    'steps-label': '✍️ பின்பற்ற வேண்டிய படிகள்:',
+                    'toast-sold-out': (qty, name) => `${name} இன் ${qty} அலகுகள் மட்டுமே கிடைக்கின்றன.`
+                },
+                'te': {
+                    'header-title': 'అగ్రి దునియా',
+                    'header-tagline': 'మార్కెట్లు, జ్ఞానం మరియు ప్రభుత్వ పథకాలకు డిజిటల్ యాక్సెస్‌తో రైతులను శక్తివంతం చేయడం',
+                    'nav-market': 'మార్కెట్‌ప్లేస్',
+                    'nav-learning': 'లెర్నింగ్ హబ్',
+                    'nav-videos': 'వీడియోలు',
+                    'nav-schemes': 'పథకాలు',
+                    'nav-contact': 'సంప్రదించండి',
+                    'sec-market-title': 'డిజిటల్ మార్కెట్‌ప్లేస్',
+                    'sec-market-p': 'వ్యవసాయ ఉత్పత్తులను నేరుగా కొనండి మరియు అమ్మండి. రైతులు తమ పంటలను జాబితా చేయవచ్చు, కొనుగోలుదారులు నేరుగా కొనుగోలు చేయవచ్చు, ఇది న్యాయమైన వాణిజ్యాన్ని నిర్ధారిస్తుంది.',
+                    'sell-title': 'మీ ఉత్పత్తులను అమ్మండి',
+                    'sell-button': 'అమ్మకానికి పోస్ట్ చేయండి',
+                    'sell-category-label': 'ఉత్పత్తి వర్గం (అవసరం)',
+                    'category-option-default': '-- వర్గాన్ని ఎంచుకోండి --',
+                    'category-option-vegetables': '🥦 కూరగాయలు',
+                    'category-option-fruits': '🍎 పండ్లు',
+                    'category-option-seeds': '🌱 విత్తనాలు',
+                    'category-option-tools': '🛠️ పనిముట్లు',
+                    'sell-image-label': 'ఉత్పత్తి ఫోటోను జోడించండి (అవసరం) 📷',
+                    'cart-title': 'మీ కార్ట్',
+                    'cart-empty': 'మీ కార్ట్ ఖాళీగా ఉంది.',
+                    'sec-learning-title': 'లెర్నింగ్ హబ్',
+                    'sec-learning-p': 'మా వేదిక ద్వారా ఆధునిక వ్యవసాయ పద్ధతులు, ఉత్పాదకత మెరుగుదల మరియు పంట నిర్వహణను నేర్చుకోండి.',
+                    'course-1-title': 'ఆధునిక నీటిపారుదల పద్ధతులు',
+                    'course-1-desc': 'డ్రిప్ మరియు స్ప్రింక్లర్ వ్యవస్థలతో నీటి వినియోగాన్ని ఆప్టిమైజ్ చేయండి. స్మార్ట్ నీటి నిర్వహణను నేర్చుకోండి.',
+                    'course-2-title': 'సేంద్రీయ వ్యవసాయం',
+                    'course-2-desc': 'సహజ, రసాయన రహిత సాగు మరియు నేల సుసంపన్నత పద్ధతులను నేర్చుకోండి.',
+                    'course-3-title': 'పంట బీమా అవగాహన',
+                    'course-3-desc': 'మీ పంటను ప్రమాదాల నుండి రక్షించడానికి పాలసీ వివరాలు మరియు క్లెయిమ్‌ల ప్రక్రియను అర్థం చేసుకోండి.',
+                    'course-4-title': 'క్లౌడ్ ఇంటిగ్రేషన్ & ఇ-లెర్నింగ్',
+                    'course-4-desc': 'డేటా నిర్వహణ మరియు డిజిటల్ వ్యవసాయ వనరుల కోసం క్లౌడ్ సాధనాలను ఉపయోగించండి.',
+                    'ai-chat-title': '✨ అగ్రి-జెమిని: తక్షణ పంట సలహాదారు',
+                    'ai-desc': 'వ్యవసాయ పద్ధతులు, మార్కెట్ ధోరణులు లేదా చీడపీడల నిర్వహణ గురించి నన్ను ఏదైనా అడగండి!',
+                    'sec-video-title': 'రైతుల కోసం వీడియోలు',
+                    'sec-video-p': 'పంట సాగు, నేల ఆరోగ్యం మరియు ఆధునిక వ్యవసాయ పద్ధతులపై ఈ ఉపయోగకరమైన వీడియోలను చూడండి.',
+                    'sec-scheme-title': 'రైతుల కోసం ప్రభుత్వ పథకాలు',
+                    'sec-scheme-p': 'రైతులకు మద్దతు ఇవ్వడానికి రూపొందించిన కొన్ని ముఖ్యమైన ప్రభుత్వ పథకాలు ఇక్కడ ఉన్నాయి. మరింత తెలుసుకోవడానికి మరియు దరఖాస్తు చేయడానికి లింక్‌లపై క్లిక్ చేయండి:',
+                    'scheme-1-desc': 'ప్రధాన మంత్రి కిసాన్ సమ్మాన్ నిధి (PM-KISAN) – రైతులకు ఏటా ₹6,000 ప్రత్యక్ష ఆదాయ మద్దతు.',
+                    'scheme-2-desc': 'ప్రధాన మంత్రి ఫసల్ బీమా యోజన (PMFBY) – ప్రకృతి వైపరీత్యాలకు వ్యతిరేకంగా రైతులకు పంట బీమా.',
+                    'scheme-3-desc': 'నేల ఆరోగ్య కార్డు పథకం – రైతులకు నేల ఆరోగ్య నివేదికలు మరియు సిఫార్సులను అందిస్తుంది.',
+                    'scheme-4-desc': 'వ్యవసాయ మౌలిక సదుపాయాల నిధి (AIF) – వ్యవసాయ మౌలిక సదుపాయాల అభివృద్ధికి ఆర్థిక మద్దతు.',
+                    'scheme-5-desc': 'జాతీయ వ్యవసాయ మార్కెట్ (eNAM) – రైతులు తమ ఉత్పత్తులను అమ్మడానికి ఆన్‌లైన్ ట్రేడింగ్ ప్లాట్‌ఫారమ్.',
+                    'sec-contact-title': 'మమ్మల్ని సంప్రదించండి',
+                    'contact-info-1': 'ఇమెయిల్: support@farmerplatform.in',
+                    'contact-info-2': 'హెల్ప్‌లైన్: +91 7393953233',
+                    'form-label-name': 'పేరు',
+                    'form-label-email': 'ఇమెయిల్',
+                    'form-label-message': 'సందేశం',
+                    'form-button-send': 'సందేశం పంపండి',
+                    'footer-copyright': '© 2025 డిజిటల్ మార్కెట్‌ప్లేస్ & రైతుల కోసం లెర్నింగ్ ప్లాట్‌ఫారమ్ | అన్ని హక్కులు రక్షించబడ్డాయి',
+                    'footer-visits': 'మొత్తం సందర్శనలు: ',
+                    'toast-success': 'సందేశం విజయవంతంగా పంపబడింది! మేము త్వరలో మిమ్మల్ని సంప్రదిస్తాము.',
+                    'toast-error-fields': 'దయచేసి మార్కెట్‌ప్లేస్ ఫీల్డ్‌లన్నింటినీ సరిగ్గా పూరించండి.',
+                    'toast-error-image': 'అమ్మడానికి ముందు దయచేసి ఉత్పత్తి ఫోటోను (స్టోరేజ్ లేదా కెమెరా నుండి) జోడించండి.',
+                    'toast-error-category': 'దయచేసి ఒక వర్గాన్ని ఎంచుకోండి: కూరగాయలు, పండ్లు, విత్తనాలు లేదా పనిముట్లు.',
+                    'toast-error-search': 'శోధించడానికి ఉత్పత్తి పేరును నమోదు చేయండి.',
+                    'alert-cart-add': (name) => `${name} కార్ట్‌కు జోడించబడింది!`,
+                    'alert-pay-success': (amount) => `₹${amount} చెల్లింపు విజయవంతమైంది! మీ కొనుగోలుకు ధన్యవాదాలు.`,
+                    'alert-pay-processing': (amount) => `₹${amount} చెల్లింపు ప్రాసెస్ చేయబడుతోంది...`,
+                    'alert-search': (name) => `మార్కెట్‌ప్లేస్‌లో "${name}" కోసం శోధిస్తోంది...`,
+                    'alert-empty-cart': 'మీ కార్ట్ ఖాళీగా ఉంది. చెల్లించడానికి ఏమీ లేదు.',
+                    'listen-label': 'వినండి',
+                    'steps-label': '✍️ అనుసరించాల్సిన దశలు:',
+                    'toast-sold-out': (qty, name) => `${name} యొక్క ${qty} యూనిట్లు మాత్రమే అందుబాటులో ఉన్నాయి.`
+                },
+                'bn': {
+                    'header-title': 'অ্যাগ্রি দুনিয়া',
+                    'header-tagline': 'বাজার, জ্ঞান এবং সরকারি প্রকল্পে ডিজিটাল অ্যাক্সেসের মাধ্যমে কৃষকদের ক্ষমতায়ন',
+                    'nav-market': 'মার্কেটপ্লেস',
+                    'nav-learning': 'লার্নিং হাব',
+                    'nav-videos': 'ভিডিও',
+                    'nav-schemes': 'প্রকল্প',
+                    'nav-contact': 'যোগাযোগ',
+                    'sec-market-title': 'ডিজিটাল মার্কেটপ্লেস',
+                    'sec-market-p': 'সরাসরি কৃষি পণ্য কিনুন এবং বিক্রি করুন। কৃষকরা তাদের ফসল তালিকাভুক্ত করতে পারেন, এবং ক্রেতারা সরাসরি কিনতে পারেন, যা ন্যায্য বাণিজ্য নিশ্চিত করে।',
+                    'sell-title': 'আপনার পণ্য বিক্রি করুন',
+                    'sell-button': 'বিক্রির জন্য পোস্ট করুন',
+                    'sell-category-label': 'পণ্যের বিভাগ (আবশ্যক)',
+                    'category-option-default': '-- বিভাগ নির্বাচন করুন --',
+                    'category-option-vegetables': '🥦 সবজি',
+                    'category-option-fruits': '🍎 ফল',
+                    'category-option-seeds': '🌱 বীজ',
+                    'category-option-tools': '🛠️ সরঞ্জাম',
+                    'sell-image-label': 'পণ্যের ছবি যোগ করুন (আবশ্যক) 📷',
+                    'cart-title': 'আপনার কার্ট',
+                    'cart-empty': 'আপনার কার্ট খালি।',
+                    'sec-learning-title': 'লার্নিং হাব',
+                    'sec-learning-p': 'আমাদের প্ল্যাটফর্মের মাধ্যমে আধুনিক কৃষি কৌশল, উৎপাদনশীলতা উন্নতি এবং ফসল ব্যবস্থাপনা শিখুন।',
+                    'course-1-title': 'আধুনিক সেচ কৌশল',
+                    'course-1-desc': 'ড্রিপ এবং স্প্রিংকলার সিস্টেমের মাধ্যমে জলের ব্যবহার অপ্টিমাইজ করুন। স্মার্ট জল ব্যবস্থাপনা শিখুন।',
+                    'course-2-title': 'জৈব চাষ',
+                    'course-2-desc': 'প্রাকৃতিক, রাসায়নিকমুক্ত চাষাবাদ এবং মাটি সমৃদ্ধকরণের কৌশলে দক্ষতা অর্জন করুন।',
+                    'course-3-title': 'ফসল বীমা সচেতনতা',
+                    'course-3-desc': 'ঝুঁকির বিরুদ্ধে আপনার ফসল সুরক্ষিত রাখতে নীতির বিবরণ এবং দাবি প্রক্রিয়া বুঝুন।',
+                    'course-4-title': 'ক্লাউড ইন্টিগ্রেশন ও ই-লার্নিং',
+                    'course-4-desc': 'ডেটা ব্যবস্থাপনা এবং ডিজিটাল কৃষি সম্পদ অ্যাক্সেসের জন্য ক্লাউড টুল ব্যবহার করুন।',
+                    'ai-chat-title': '✨ অ্যাগ্রি-জেমিনি: তাৎক্ষণিক ফসল উপদেষ্টা',
+                    'ai-desc': 'কৃষি কৌশল, বাজারের প্রবণতা বা পোকামাকড় ব্যবস্থাপনা সম্পর্কে আমাকে যেকোনো কিছু জিজ্ঞাসা করুন!',
+                    'sec-video-title': 'কৃষকদের জন্য ভিডিও',
+                    'sec-video-p': 'ফসল চাষ, মাটির স্বাস্থ্য এবং আধুনিক কৃষি পদ্ধতি সম্পর্কিত এই সহায়ক ভিডিওগুলি দেখুন।',
+                    'sec-scheme-title': 'কৃষকদের জন্য সরকারি প্রকল্প',
+                    'sec-scheme-p': 'কৃষকদের সহায়তার জন্য ডিজাইন করা কিছু গুরুত্বপূর্ণ সরকারি প্রকল্প এখানে দেওয়া হলো। আরও জানতে এবং আবেদন করতে লিঙ্কে ক্লিক করুন:',
+                    'scheme-1-desc': 'প্রধানমন্ত্রী কিষান সম্মান নিধি (PM-KISAN) – কৃষকদের বার্ষিক ₹৬,০০০ সরাসরি আয় সহায়তা।',
+                    'scheme-2-desc': 'প্রধানমন্ত্রী ফসল বীমা যোজনা (PMFBY) – প্রাকৃতিক দুর্যোগের বিরুদ্ধে কৃষকদের জন্য ফসল বীমা।',
+                    'scheme-3-desc': 'মৃত্তিকা স্বাস্থ্য কার্ড প্রকল্প – কৃষকদের মাটির স্বাস্থ্য প্রতিবেদন এবং সুপারিশ প্রদান করে।',
+                    'scheme-4-desc': 'কৃষি অবকাঠামো তহবিল (AIF) – কৃষি অবকাঠামো উন্নয়নের জন্য আর্থিক সহায়তা।',
+                    'scheme-5-desc': 'জাতীয় কৃষি বাজার (eNAM) – কৃষকদের তাদের পণ্য বিক্রির জন্য অনলাইন ট্রেডিং প্ল্যাটফর্ম।',
+                    'sec-contact-title': 'যোগাযোগ করুন',
+                    'contact-info-1': 'ইমেইল: support@farmerplatform.in',
+                    'contact-info-2': 'হেল্পলাইন: +91 7393953233',
+                    'form-label-name': 'নাম',
+                    'form-label-email': 'ইমেইল',
+                    'form-label-message': 'বার্তা',
+                    'form-button-send': 'বার্তা পাঠান',
+                    'footer-copyright': '© 2025 ডিজিটাল মার্কেটপ্লেস ও কৃষকদের জন্য লার্নিং প্ল্যাটফর্ম | সর্বস্বত্ব সংরক্ষিত',
+                    'footer-visits': 'মোট ভিজিট: ',
+                    'toast-success': 'বার্তা সফলভাবে পাঠানো হয়েছে! আমরা শীঘ্রই আপনার সাথে যোগাযোগ করব।',
+                    'toast-error-fields': 'অনুগ্রহ করে মার্কেটপ্লেসের সব ক্ষেত্র সঠিকভাবে পূরণ করুন।',
+                    'toast-error-image': 'বিক্রি করার আগে অনুগ্রহ করে পণ্যের একটি ছবি (স্টোরেজ বা ক্যামেরা থেকে) যোগ করুন।',
+                    'toast-error-category': 'অনুগ্রহ করে একটি বিভাগ নির্বাচন করুন: সবজি, ফল, বীজ, বা সরঞ্জাম।',
+                    'toast-error-search': 'অনুসন্ধান করতে পণ্যের নাম লিখুন।',
+                    'alert-cart-add': (name) => `${name} কার্টে যোগ করা হয়েছে!`,
+                    'alert-pay-success': (amount) => `₹${amount} পেমেন্ট সফল হয়েছে! আপনার কেনাকাটার জন্য ধন্যবাদ।`,
+                    'alert-pay-processing': (amount) => `₹${amount} পেমেন্ট প্রক্রিয়াকরণ হচ্ছে...`,
+                    'alert-search': (name) => `মার্কেটপ্লেসে "${name}" অনুসন্ধান করা হচ্ছে...`,
+                    'alert-empty-cart': 'আপনার কার্ট খালি। পেমেন্ট করার কিছু নেই।',
+                    'listen-label': 'শুনুন',
+                    'steps-label': '✍️ অনুসরণ করার ধাপ:',
+                    'toast-sold-out': (qty, name) => `${name}-এর মাত্র ${qty}টি ইউনিট উপলব্ধ।`
                 }
             };
 
             function applyTranslation(lang) {
+                if (!SUPPORTED_LANGS.includes(lang)) lang = 'en';
                 currentLang = lang;
                 body.setAttribute('lang', lang);
-                langToggle.textContent = lang.toUpperCase() === 'EN' ? 'EN/HI' : 'HI/EN';
+                langToggle.textContent = lang.toUpperCase();
+                langToggle.setAttribute('aria-label', `Change language (current: ${LANG_LABELS[lang]})`);
 
                 document.querySelectorAll('[data-key]').forEach(element => {
                     const key = element.getAttribute('data-key');
-                    const text = translations[lang][key];
+                    const text = translations[lang] && translations[lang][key];
                     if (text && typeof text === 'string') {
                         element.textContent = text;
                     }
@@ -1192,26 +1378,54 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                         displayCart(); 
                         renderNotifications();
 
-                const initialChatText = lang === 'en' ? "Hello! I'm Agri-Gemini, your AI crop expert. Ask me anything about farming techniques, pests, or market advice." : "नमस्ते! मैं एग्री-जेमिनी, आपका एआई फसल विशेषज्ञ हूँ। मुझसे खेती की तकनीकों, कीटों या बाज़ार सलाह के बारे में कुछ भी पूछें।";
+                const initialChatText = INITIAL_CHAT_TEXT[lang] || INITIAL_CHAT_TEXT.en;
                 const initialChatBubble = document.querySelector('#chatHistory .chat-message.ai .message-bubble');
                 if (initialChatBubble) {
                     initialChatBubble.textContent = initialChatText;
                 }
 
+                if (langMenu) {
+                    langMenu.querySelectorAll('[data-lang]').forEach(btn => {
+                        btn.classList.toggle('active', btn.getAttribute('data-lang') === lang);
+                    });
+                }
+
                 stopPlayback();
             }
 
-            const savedLang = localStorage.getItem('language') || 'en';
-            applyTranslation(savedLang);
+            // Build the language dropdown menu from SUPPORTED_LANGS/LANG_LABELS
+            const langMenu = document.getElementById('langMenu');
+            if (langMenu) {
+                langMenu.innerHTML = SUPPORTED_LANGS.map(code =>
+                    `<button type="button" class="lang-menu-item" data-lang="${code}">${LANG_LABELS[code]}</button>`
+                ).join('');
 
-            langToggle.addEventListener('click', () => {
-                const newLang = currentLang === 'en' ? 'hi' : 'en';
-                localStorage.setItem('language', newLang);
-                applyTranslation(newLang);
-                if (techniqueModal.classList.contains('visible')) {
-                    openTechniqueModal(techniqueModal.getAttribute('data-topic'));
+                langMenu.addEventListener('click', (e) => {
+                    const btn = e.target.closest('[data-lang]');
+                    if (!btn) return;
+                    const newLang = btn.getAttribute('data-lang');
+                    localStorage.setItem('language', newLang);
+                    applyTranslation(newLang);
+                    if (techniqueModal.classList.contains('visible')) {
+                        openTechniqueModal(techniqueModal.getAttribute('data-topic'));
+                    }
+                    langMenu.classList.remove('open');
+                });
+            }
+
+            langToggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (langMenu) langMenu.classList.toggle('open');
+            });
+
+            document.addEventListener('click', (e) => {
+                if (langMenu && langMenu.classList.contains('open') && !langMenu.contains(e.target) && e.target !== langToggle) {
+                    langMenu.classList.remove('open');
                 }
             });
+
+            const savedLang = localStorage.getItem('language') || 'en';
+            applyTranslation(savedLang);
 
             /* ===================================================== */
             /* EASY LEARNING GUIDE MODAL — "Tap to see easy guide"   */
@@ -1222,52 +1436,52 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     emoji: '💧',
                     diagram: ['🚰', '⚙️', '💧', '🌱'],
                     steps: [
-                        { icon: '👉', en: 'Check your soil before watering — dig down about 2 inches; only water if it feels dry.', hi: 'पानी देने से पहले मिट्टी जांचें — करीब 2 इंच खोदकर देखें; अगर सूखी लगे तभी पानी दें।' },
-                        { icon: '🚿', en: 'Install drip lines or micro-sprinklers along the crop rows instead of flooding the field.', hi: 'खेत में पानी भरने की जगह फसल की कतारों में ड्रिप लाइन या माइक्रो-स्प्रिंकलर लगाएं।' },
-                        { icon: '⏰', en: 'Water early morning or evening to reduce loss from evaporation.', hi: 'वाष्पीकरण से बचाव के लिए सुबह जल्दी या शाम को पानी दें।' },
-                        { icon: '🔧', en: 'Check pipes and drip emitters every week for leaks or blockages.', hi: 'हर हफ्ते पाइप और ड्रिप एमिटर में रिसाव या रुकावट की जांच करें।' },
-                        { icon: '📊', en: 'Keep a simple weekly note of water used to see how much you are saving.', hi: 'बचत देखने के लिए हर हफ्ते इस्तेमाल हुए पानी का हिसाब रखें।' }
+                        { icon: '👉', en: 'Check your soil before watering — dig down about 2 inches; only water if it feels dry.', hi: 'पानी देने से पहले मिट्टी जांचें — करीब 2 इंच खोदकर देखें; अगर सूखी लगे तभी पानी दें।', ta: 'நீர் பாய்ச்சுவதற்கு முன் மண்ணை சரிபார்க்கவும் — சுமார் 2 அங்குலம் தோண்டிப் பாருங்கள்; உலர்ந்திருந்தால் மட்டும் நீர் பாய்ச்சவும்.', te: 'నీళ్లు పోసే ముందు మీ నేలను తనిఖీ చేయండి — దాదాపు 2 అంగుళాలు తవ్వి చూడండి; పొడిగా అనిపిస్తేనే నీళ్లు పోయండి.', bn: 'জল দেওয়ার আগে মাটি পরীক্ষা করুন — প্রায় ২ ইঞ্চি খুঁড়ে দেখুন; শুকনো মনে হলেই জল দিন।' },
+                        { icon: '🚿', en: 'Install drip lines or micro-sprinklers along the crop rows instead of flooding the field.', hi: 'खेत में पानी भरने की जगह फसल की कतारों में ड्रिप लाइन या माइक्रो-स्प्रिंकलर लगाएं।', ta: 'வயலில் நீர் நிரப்புவதற்குப் பதிலாக பயிர் வரிசைகளில் சொட்டு நீர் குழாய்கள் அல்லது மைக்ரோ-ஸ்பிரிங்க்லர்களை பொருத்தவும்.', te: 'పొలాన్ని నీటితో నింపడానికి బదులుగా పంట వరుసల వెంట డ్రిప్ లైన్లు లేదా మైక్రో-స్ప్రింక్లర్లను అమర్చండి.', bn: 'জমি প্লাবিত করার পরিবর্তে ফসলের সারি বরাবর ড্রিপ লাইন বা মাইক্রো-স্প্রিংকলার বসান।' },
+                        { icon: '⏰', en: 'Water early morning or evening to reduce loss from evaporation.', hi: 'वाष्पीकरण से बचाव के लिए सुबह जल्दी या शाम को पानी दें।', ta: 'ஆவியாதலால் ஏற்படும் இழப்பைக் குறைக்க அதிகாலை அல்லது மாலையில் நீர் பாய்ச்சவும்.', te: 'ఆవిరి కావడం వల్ల నష్టాన్ని తగ్గించడానికి ఉదయం లేదా సాయంత్రం నీళ్లు పోయండి.', bn: 'বাষ্পীভবনের কারণে ক্ষতি কমাতে ভোরে বা সন্ধ্যায় জল দিন।' },
+                        { icon: '🔧', en: 'Check pipes and drip emitters every week for leaks or blockages.', hi: 'हर हफ्ते पाइप और ड्रिप एमिटर में रिसाव या रुकावट की जांच करें।', ta: 'கசிவு அல்லது அடைப்புகளுக்காக ஒவ்வொரு வாரமும் குழாய்கள் மற்றும் சொட்டு உமிழிகளை சரிபார்க்கவும்.', te: 'లీకేజీలు లేదా అడ్డంకుల కోసం ప్రతి వారం పైపులు మరియు డ్రిప్ ఎమిటర్లను తనిఖీ చేయండి.', bn: 'ফুটো বা বাধার জন্য প্রতি সপ্তাহে পাইপ এবং ড্রিপ এমিটার পরীক্ষা করুন।' },
+                        { icon: '📊', en: 'Keep a simple weekly note of water used to see how much you are saving.', hi: 'बचत देखने के लिए हर हफ्ते इस्तेमाल हुए पानी का हिसाब रखें।', ta: 'எவ்வளவு சேமிக்கிறீர்கள் என்பதைப் பார்க்க பயன்படுத்தப்பட்ட நீரின் எளிய வாராந்திர குறிப்பை வைத்திருங்கள்.', te: 'మీరు ఎంత ఆదా చేస్తున్నారో చూడటానికి ఉపయోగించిన నీటి గురించి సాధారణ వారపు గమనిక ఉంచండి.', bn: 'কতটা সাশ্রয় হচ্ছে তা দেখতে ব্যবহৃত জলের একটি সহজ সাপ্তাহিক হিসাব রাখুন।' }
                     ],
-                    tip: { en: 'Drip irrigation can cut water use by 40–60% compared to flood irrigation, while also improving crop yield.', hi: 'खेत में पानी भरने की तुलना में ड्रिप सिंचाई से 40–60% तक पानी बचता है और फसल की पैदावार भी बढ़ती है।' }
+                    tip: { en: 'Drip irrigation can cut water use by 40–60% compared to flood irrigation, while also improving crop yield.', hi: 'खेत में पानी भरने की तुलना में ड्रिप सिंचाई से 40–60% तक पानी बचता है और फसल की पैदावार भी बढ़ती है।', ta: 'வெள்ள நீர்ப்பாசனத்துடன் ஒப்பிடும்போது சொட்டு நீர்ப்பாசனம் 40–60% நீர் பயன்பாட்டைக் குறைக்கும், மேலும் பயிர் விளைச்சலையும் மேம்படுத்தும்.', te: 'వరద నీటిపారుదలతో పోలిస్తే డ్రిప్ ఇరిగేషన్ నీటి వినియోగాన్ని 40–60% తగ్గించగలదు, అలాగే పంట దిగుబడిని కూడా మెరుగుపరుస్తుంది.', bn: 'বন্যা সেচের তুলনায় ড্রিপ সেচ জলের ব্যবহার ৪০–৬০% কমাতে পারে, পাশাপাশি ফসলের ফলনও বাড়ায়।' }
                 },
                 organic: {
                     courseNum: 2,
                     emoji: '🌿',
                     diagram: ['🍂', '🪱', '🌱', '🥦'],
                     steps: [
-                        { icon: '🍂', en: 'Start a compost pit with crop waste, dry leaves, and cow dung — turn it every 2 weeks.', hi: 'फसल अवशेष, सूखी पत्तियों और गोबर से खाद का गड्ढा बनाएं — हर 2 हफ्ते में पलटें।' },
-                        { icon: '🪱', en: 'Use vermicompost or biofertilizers in place of chemical fertilizers.', hi: 'रासायनिक खाद की जगह वर्मीकम्पोस्ट या जैव-उर्वरक का उपयोग करें।' },
-                        { icon: '🌼', en: 'Rotate crops and try intercropping to keep the soil\'s nutrients balanced.', hi: 'मिट्टी के पोषक तत्व संतुलित रखने के लिए फसल चक्र और अंतर-फसल अपनाएं।' },
-                        { icon: '🐞', en: 'Control pests with neem oil spray or companion planting instead of chemical pesticides.', hi: 'रासायनिक कीटनाशक की जगह नीम के तेल का छिड़काव या साथी-रोपण अपनाएं।' },
-                        { icon: '📜', en: 'Once your field stays chemical-free for the required period, apply for organic certification to sell at better prices.', hi: 'खेत पूरी तरह रसायन-मुक्त होने के बाद बेहतर दाम पाने के लिए ऑर्गेनिक प्रमाणन के लिए आवेदन करें।' }
+                        { icon: '🍂', en: 'Start a compost pit with crop waste, dry leaves, and cow dung — turn it every 2 weeks.', hi: 'फसल अवशेष, सूखी पत्तियों और गोबर से खाद का गड्ढा बनाएं — हर 2 हफ्ते में पलटें।', ta: 'பயிர் கழிவு, உலர்ந்த இலைகள் மற்றும் சாணத்துடன் உரக்குழி தொடங்குங்கள் — ஒவ்வொரு 2 வாரங்களுக்கும் புரட்டவும்.', te: 'పంట వ్యర్థాలు, ఎండిన ఆకులు మరియు ఆవు పేడతో కంపోస్ట్ గుంట మొదలుపెట్టండి — ప్రతి 2 వారాలకు తిప్పండి.', bn: 'ফসলের বর্জ্য, শুকনো পাতা এবং গোবর দিয়ে একটি কম্পোস্ট গর্ত শুরু করুন — প্রতি ২ সপ্তাহে উল্টান।' },
+                        { icon: '🪱', en: 'Use vermicompost or biofertilizers in place of chemical fertilizers.', hi: 'रासायनिक खाद की जगह वर्मीकम्पोस्ट या जैव-उर्वरक का उपयोग करें।', ta: 'ரசாயன உரங்களுக்குப் பதிலாக மண்புழு உரம் அல்லது உயிர்-உரங்களைப் பயன்படுத்துங்கள்.', te: 'రసాయన ఎరువులకు బదులుగా వర్మీకంపోస్ట్ లేదా జీవ ఎరువులను ఉపయోగించండి.', bn: 'রাসায়নিক সারের পরিবর্তে ভার্মিকম্পোস্ট বা জৈব সার ব্যবহার করুন।' },
+                        { icon: '🌼', en: 'Rotate crops and try intercropping to keep the soil\'s nutrients balanced.', hi: 'मिट्टी के पोषक तत्व संतुलित रखने के लिए फसल चक्र और अंतर-फसल अपनाएं।', ta: 'மண்ணின் ஊட்டச்சத்துக்களை சமநிலையில் வைத்திருக்க பயிர் சுழற்சி மற்றும் இடைப்பயிரிடலை முயற்சிக்கவும்.', te: 'నేల పోషకాలను సమతుల్యంగా ఉంచడానికి పంట మార్పిడి మరియు అంతర పంటలను ప్రయత్నించండి.', bn: 'মাটির পুষ্টি সুষম রাখতে ফসল আবর্তন এবং আন্তঃফসল চেষ্টা করুন।' },
+                        { icon: '🐞', en: 'Control pests with neem oil spray or companion planting instead of chemical pesticides.', hi: 'रासायनिक कीटनाशक की जगह नीम के तेल का छिड़काव या साथी-रोपण अपनाएं।', ta: 'ரசாயன பூச்சிக்கொல்லிகளுக்குப் பதிலாக வேப்ப எண்ணெய் தெளிப்பு அல்லது துணை-நடவு மூலம் பூச்சிகளைக் கட்டுப்படுத்துங்கள்.', te: 'రసాయన పురుగుమందులకు బదులుగా వేప నూనె స్ప్రే లేదా సహచర పెంపకంతో పురుగులను నియంత్రించండి.', bn: 'রাসায়নিক কীটনাশকের পরিবর্তে নিম তেল স্প্রে বা সহচর রোপণের মাধ্যমে পোকা নিয়ন্ত্রণ করুন।' },
+                        { icon: '📜', en: 'Once your field stays chemical-free for the required period, apply for organic certification to sell at better prices.', hi: 'खेत पूरी तरह रसायन-मुक्त होने के बाद बेहतर दाम पाने के लिए ऑर्गेनिक प्रमाणन के लिए आवेदन करें।', ta: 'உங்கள் வயல் தேவையான காலத்திற்கு ரசாயனமில்லாமல் இருந்தவுடன், சிறந்த விலைக்கு விற்க கரிம சான்றிதழுக்கு விண்ணப்பிக்கவும்.', te: 'మీ పొలం అవసరమైన కాలం పాటు రసాయన రహితంగా ఉన్న తర్వాత, మెరుగైన ధరలకు అమ్మడానికి సేంద్రీయ ధృవీకరణ కోసం దరఖాస్తు చేసుకోండి.', bn: 'আপনার জমি প্রয়োজনীয় সময়ের জন্য রাসায়নিকমুক্ত থাকলে, ভালো দামে বিক্রির জন্য জৈব সার্টিফিকেশনের জন্য আবেদন করুন।' }
                     ],
-                    tip: { en: 'Healthy, organic-rich soil holds more water and needs fewer inputs season after season.', hi: 'जैविक तत्वों से भरपूर स्वस्थ मिट्टी अधिक पानी रोकती है और हर मौसम में कम खाद-दवा की जरूरत पड़ती है।' }
+                    tip: { en: 'Healthy, organic-rich soil holds more water and needs fewer inputs season after season.', hi: 'जैविक तत्वों से भरपूर स्वस्थ मिट्टी अधिक पानी रोकती है और हर मौसम में कम खाद-दवा की जरूरत पड़ती है।', ta: 'ஆரோக்கியமான, கரிமச்சத்து நிறைந்த மண் அதிக நீரைத் தக்கவைத்து, ஒவ்வொரு பருவத்திலும் குறைவான உள்ளீடுகளைத் தேவைப்படுத்தும்.', te: 'ఆరోగ్యకరమైన, సేంద్రీయ సమృద్ధిగల నేల ఎక్కువ నీటిని పట్టుకుంటుంది మరియు ప్రతి సీజన్‌లో తక్కువ ఇన్‌పుట్‌లు అవసరం.', bn: 'স্বাস্থ্যকর, জৈব-সমৃদ্ধ মাটি বেশি জল ধরে রাখে এবং মৌসুমের পর মৌসুম কম উপকরণের প্রয়োজন হয়।' }
                 },
                 insurance: {
                     courseNum: 3,
                     emoji: '🛡️',
                     diagram: ['🌾', '⚠️', '🛡️', '💰'],
                     steps: [
-                        { icon: '📝', en: 'Enroll in Pradhan Mantri Fasal Bima Yojana (PMFBY) before the cut-off date for your crop season.', hi: 'अपने फसल सीजन की अंतिम तिथि से पहले प्रधानमंत्री फसल बीमा योजना (PMFBY) में नामांकन करें।' },
-                        { icon: '🏦', en: 'You pay only a small share of the premium — the government covers the rest.', hi: 'आपको प्रीमियम का बहुत छोटा हिस्सा ही देना होता है — बाकी सरकार वहन करती है।' },
-                        { icon: '🌪️', en: 'If your crop is damaged by drought, flood, pests, or disease, report it to your bank or insurer within 72 hours.', hi: 'सूखा, बाढ़, कीट या रोग से फसल खराब होने पर 72 घंटे के अंदर बैंक या बीमा कंपनी को सूचित करें।' },
-                        { icon: '📸', en: 'Take clear photos of the damaged field as proof when you report the loss.', hi: 'नुकसान की सूचना देते समय खराब फसल की स्पष्ट तस्वीरें सबूत के तौर पर लें।' },
-                        { icon: '💵', en: 'After assessment, the claim amount is usually paid directly into your linked bank account.', hi: 'आकलन के बाद दावे की राशि आमतौर पर सीधे आपके जुड़े बैंक खाते में भेजी जाती है।' }
+                        { icon: '📝', en: 'Enroll in Pradhan Mantri Fasal Bima Yojana (PMFBY) before the cut-off date for your crop season.', hi: 'अपने फसल सीजन की अंतिम तिथि से पहले प्रधानमंत्री फसल बीमा योजना (PMFBY) में नामांकन करें।', ta: 'உங்கள் பயிர் பருவத்தின் கடைசி தேதிக்கு முன் பிரதான் மந்திரி பசல் பீமா யோஜனாவில் (PMFBY) பதிவு செய்யுங்கள்.', te: 'మీ పంట సీజన్ చివరి తేదీకి ముందు ప్రధాన మంత్రి ఫసల్ బీమా యోజన (PMFBY)లో నమోదు చేసుకోండి.', bn: 'আপনার ফসলের মৌসুমের শেষ তারিখের আগে প্রধানমন্ত্রী ফসল বীমা যোজনায় (PMFBY) নথিভুক্ত করুন।' },
+                        { icon: '🏦', en: 'You pay only a small share of the premium — the government covers the rest.', hi: 'आपको प्रीमियम का बहुत छोटा हिस्सा ही देना होता है — बाकी सरकार वहन करती है।', ta: 'நீங்கள் பிரீமியத்தில் ஒரு சிறிய பங்கை மட்டுமே செலுத்துகிறீர்கள் — மீதமுள்ளதை அரசு ஏற்கிறது.', te: 'మీరు ప్రీమియంలో కేవలం చిన్న భాగాన్ని మాత్రమే చెల్లిస్తారు — మిగిలినది ప్రభుత్వం భరిస్తుంది.', bn: 'আপনি প্রিমিয়ামের শুধু একটি ছোট অংশ প্রদান করেন — বাকিটা সরকার বহন করে।' },
+                        { icon: '🌪️', en: 'If your crop is damaged by drought, flood, pests, or disease, report it to your bank or insurer within 72 hours.', hi: 'सूखा, बाढ़, कीट या रोग से फसल खराब होने पर 72 घंटे के अंदर बैंक या बीमा कंपनी को सूचित करें।', ta: 'வறட்சி, வெள்ளம், பூச்சி அல்லது நோயால் உங்கள் பயிர் சேதமடைந்தால், 72 மணி நேரத்திற்குள் உங்கள் வங்கி அல்லது காப்பீட்டாளரிடம் தெரிவிக்கவும்.', te: 'కరువు, వరద, పురుగులు లేదా వ్యాధి వల్ల మీ పంట దెబ్బతింటే, 72 గంటల్లోపు మీ బ్యాంకుకు లేదా బీమా సంస్థకు తెలియజేయండి.', bn: 'খরা, বন্যা, পোকামাকড় বা রোগে আপনার ফসল ক্ষতিগ্রস্ত হলে, ৭২ ঘণ্টার মধ্যে আপনার ব্যাংক বা বীমাকারীকে জানান।' },
+                        { icon: '📸', en: 'Take clear photos of the damaged field as proof when you report the loss.', hi: 'नुकसान की सूचना देते समय खराब फसल की स्पष्ट तस्वीरें सबूत के तौर पर लें।', ta: 'இழப்பைப் புகாரளிக்கும்போது சேதமடைந்த வயலின் தெளிவான புகைப்படங்களை ஆதாரமாக எடுக்கவும்.', te: 'నష్టాన్ని నివేదించేటప్పుడు దెబ్బతిన్న పొలం యొక్క స్పష్టమైన ఫోటోలను రుజువుగా తీయండి.', bn: 'ক্ষতির প্রতিবেদন করার সময় ক্ষতিগ্রস্ত জমির স্পষ্ট ছবি প্রমাণ হিসেবে তুলুন।' },
+                        { icon: '💵', en: 'After assessment, the claim amount is usually paid directly into your linked bank account.', hi: 'आकलन के बाद दावे की राशि आमतौर पर सीधे आपके जुड़े बैंक खाते में भेजी जाती है।', ta: 'மதிப்பீட்டிற்குப் பிறகு, உரிமைகோரல் தொகை பொதுவாக உங்கள் இணைக்கப்பட்ட வங்கிக் கணக்கில் நேரடியாக செலுத்தப்படும்.', te: 'మదింపు తర్వాత, క్లెయిమ్ మొత్తం సాధారణంగా మీ లింక్ చేసిన బ్యాంకు ఖాతాలో నేరుగా చెల్లించబడుతుంది.', bn: 'মূল্যায়নের পর, দাবির পরিমাণ সাধারণত সরাসরি আপনার সংযুক্ত ব্যাংক অ্যাকাউন্টে প্রদান করা হয়।' }
                     ],
-                    tip: { en: 'Keep your Aadhaar, land records, and bank details updated — mismatched details are the most common reason claims get delayed.', hi: 'अपना आधार, भूमि रिकॉर्ड और बैंक विवरण अपडेट रखें — जानकारी न मिलने से ही ज़्यादातर दावों में देरी होती है।' }
+                    tip: { en: 'Keep your Aadhaar, land records, and bank details updated — mismatched details are the most common reason claims get delayed.', hi: 'अपना आधार, भूमि रिकॉर्ड और बैंक विवरण अपडेट रखें — जानकारी न मिलने से ही ज़्यादातर दावों में देरी होती है।', ta: 'உங்கள் ஆதார், நில பதிவுகள் மற்றும் வங்கி விவரங்களை புதுப்பித்து வைத்திருங்கள் — பொருந்தாத விவரங்களே உரிமைகோரல் தாமதத்திற்கு பொதுவான காரணம்.', te: 'మీ ఆధార్, భూమి రికార్డులు మరియు బ్యాంకు వివరాలను తాజాగా ఉంచుకోండి — సరిపోలని వివరాలే క్లెయిమ్‌లు ఆలస్యం కావడానికి అత్యంత సాధారణ కారణం.', bn: 'আপনার আধার, জমির রেকর্ড এবং ব্যাংক বিবরণ আপডেট রাখুন — অমিল বিবরণই দাবি বিলম্বের সবচেয়ে সাধারণ কারণ।' }
                 },
                 cloud: {
                     courseNum: 4,
                     emoji: '☁️',
                     diagram: ['📱', '☁️', '📊', '🎓'],
                     steps: [
-                        { icon: '📱', en: 'Use a smartphone or your nearest CSC (Common Service Centre) to access government agri-portals and apps.', hi: 'सरकारी कृषि पोर्टल और ऐप तक पहुंचने के लिए स्मार्टफोन या नज़दीकी CSC (कॉमन सर्विस सेंटर) का उपयोग करें।' },
-                        { icon: '☁️', en: 'Save your soil health reports, insurance papers, and land records online so they are never lost.', hi: 'मिट्टी स्वास्थ्य रिपोर्ट, बीमा कागज़ात और भूमि रिकॉर्ड को ऑनलाइन सुरक्षित रखें ताकि वे कभी न खोएं।' },
-                        { icon: '📊', en: 'Check mandi (market) prices online before deciding when and where to sell your produce.', hi: 'उपज कब और कहां बेचनी है, यह तय करने से पहले मंडी के भाव ऑनलाइन जांच लें।' },
-                        { icon: '🎓', en: 'Watch free e-learning videos and webinars from agricultural universities (KVK) to learn new techniques.', hi: 'नई तकनीकें सीखने के लिए कृषि विश्वविद्यालयों (KVK) के मुफ्त ई-लर्निंग वीडियो और वेबिनार देखें।' },
-                        { icon: '🔔', en: 'Turn on SMS or app alerts for weather warnings and scheme deadlines.', hi: 'मौसम की चेतावनी और योजनाओं की अंतिम तिथि के लिए SMS या ऐप अलर्ट चालू करें।' }
+                        { icon: '📱', en: 'Use a smartphone or your nearest CSC (Common Service Centre) to access government agri-portals and apps.', hi: 'सरकारी कृषि पोर्टल और ऐप तक पहुंचने के लिए स्मार्टफोन या नज़दीकी CSC (कॉमन सर्विस सेंटर) का उपयोग करें।', ta: 'அரசு வேளாண் போர்டல்கள் மற்றும் ஆப்ஸை அணுக ஸ்மார்ட்போன் அல்லது உங்களுக்கு அருகிலுள்ள CSC (பொது சேவை மையம்) பயன்படுத்துங்கள்.', te: 'ప్రభుత్వ వ్యవసాయ పోర్టల్‌లు మరియు యాప్‌లను యాక్సెస్ చేయడానికి స్మార్ట్‌ఫోన్ లేదా మీకు దగ్గరలోని CSC (కామన్ సర్వీస్ సెంటర్) ఉపయోగించండి.', bn: 'সরকারি কৃষি পোর্টাল ও অ্যাপ ব্যবহার করতে স্মার্টফোন বা আপনার নিকটতম CSC (কমন সার্ভিস সেন্টার) ব্যবহার করুন।' },
+                        { icon: '☁️', en: 'Save your soil health reports, insurance papers, and land records online so they are never lost.', hi: 'मिट्टी स्वास्थ्य रिपोर्ट, बीमा कागज़ात और भूमि रिकॉर्ड को ऑनलाइन सुरक्षित रखें ताकि वे कभी न खोएं।', ta: 'உங்கள் மண் ஆரோக்கிய அறிக்கைகள், காப்பீட்டு ஆவணங்கள் மற்றும் நில பதிவுகளை ஆன்லைனில் சேமித்து வையுங்கள், அவை ஒருபோதும் தொலைந்துவிடாது.', te: 'మీ నేల ఆరోగ్య నివేదికలు, బీమా పత్రాలు మరియు భూమి రికార్డులను ఆన్‌లైన్‌లో సేవ్ చేయండి, తద్వారా అవి ఎప్పటికీ పోవు.', bn: 'আপনার মাটির স্বাস্থ্য প্রতিবেদন, বীমার কাগজপত্র এবং জমির রেকর্ড অনলাইনে সংরক্ষণ করুন যাতে সেগুলো কখনো হারিয়ে না যায়।' },
+                        { icon: '📊', en: 'Check mandi (market) prices online before deciding when and where to sell your produce.', hi: 'उपज कब और कहां बेचनी है, यह तय करने से पहले मंडी के भाव ऑनलाइन जांच लें।', ta: 'உங்கள் விளைபொருளை எப்போது, எங்கு விற்பது என்பதை முடிவு செய்யும் முன் மண்டி (சந்தை) விலைகளை ஆன்லைனில் சரிபார்க்கவும்.', te: 'మీ ఉత్పత్తిని ఎప్పుడు, ఎక్కడ అమ్మాలో నిర్ణయించే ముందు మండి (మార్కెట్) ధరలను ఆన్‌లైన్‌లో తనిఖీ చేయండి.', bn: 'আপনার ফসল কখন এবং কোথায় বিক্রি করবেন তা ঠিক করার আগে অনলাইনে মান্ডি (বাজার) দাম পরীক্ষা করুন।' },
+                        { icon: '🎓', en: 'Watch free e-learning videos and webinars from agricultural universities (KVK) to learn new techniques.', hi: 'नई तकनीकें सीखने के लिए कृषि विश्वविद्यालयों (KVK) के मुफ्त ई-लर्निंग वीडियो और वेबिनार देखें।', ta: 'புதிய நுட்பங்களைக் கற்க வேளாண் பல்கலைக்கழகங்களின் (KVK) இலவச இ-கற்றல் வீடியோக்கள் மற்றும் வெபினார்களைப் பாருங்கள்.', te: 'కొత్త పద్ధతులను నేర్చుకోవడానికి వ్యవసాయ విశ్వవిద్యాలయాల (KVK) ఉచిత ఇ-లెర్నింగ్ వీడియోలు మరియు వెబినార్‌లను చూడండి.', bn: 'নতুন কৌশল শিখতে কৃষি বিশ্ববিদ্যালয়ের (KVK) বিনামূল্যে ই-লার্নিং ভিডিও এবং ওয়েবিনার দেখুন।' },
+                        { icon: '🔔', en: 'Turn on SMS or app alerts for weather warnings and scheme deadlines.', hi: 'मौसम की चेतावनी और योजनाओं की अंतिम तिथि के लिए SMS या ऐप अलर्ट चालू करें।', ta: 'வானிலை எச்சரிக்கைகள் மற்றும் திட்ட காலக்கெடுவுக்கான SMS அல்லது ஆப் அறிவிப்புகளை இயக்கவும்.', te: 'వాతావరణ హెచ్చరికలు మరియు పథకం గడువుల కోసం SMS లేదా యాప్ అలర్ట్‌లను ఆన్ చేయండి.', bn: 'আবহাওয়ার সতর্কতা এবং প্রকল্পের শেষ তারিখের জন্য SMS বা অ্যাপ অ্যালার্ট চালু করুন।' }
                     ],
-                    tip: { en: 'A free app like Kisan Suvidha or eNAM puts market prices and weather alerts right in your pocket.', hi: 'किसान सुविधा या ई-नाम जैसे मुफ्त ऐप से बाज़ार भाव और मौसम अलर्ट सीधे आपकी जेब में मिलते हैं।' }
+                    tip: { en: 'A free app like Kisan Suvidha or eNAM puts market prices and weather alerts right in your pocket.', hi: 'किसान सुविधा या ई-नाम जैसे मुफ्त ऐप से बाज़ार भाव और मौसम अलर्ट सीधे आपकी जेब में मिलते हैं।', ta: 'கிசான் சுவிதா அல்லது eNAM போன்ற இலவச ஆப் சந்தை விலைகள் மற்றும் வானிலை எச்சரிக்கைகளை உங்கள் பாக்கெட்டிலேயே தருகிறது.', te: 'కిసాన్ సువిధ లేదా eNAM వంటి ఉచిత యాప్ మార్కెట్ ధరలు మరియు వాతావరణ హెచ్చరికలను నేరుగా మీ జేబులో ఉంచుతుంది.', bn: 'কিষান সুবিধা বা eNAM-এর মতো একটি বিনামূল্যের অ্যাপ বাজারের দাম এবং আবহাওয়ার সতর্কতা সরাসরি আপনার পকেটে নিয়ে আসে।' }
                 }
             };
 
@@ -1296,11 +1510,11 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                         <div class="technique-step">
                             <span class="step-num">${i + 1}</span>
                             <span class="step-icon">${step.icon}</span>
-                            <span>${step[currentLang]}</span>
+                            <span>${step[currentLang] || step.en}</span>
                         </div>
                     `).join('');
 
-                techniqueTip.textContent = '💡 ' + guide.tip[currentLang];
+                techniqueTip.textContent = '💡 ' + (guide.tip[currentLang] || guide.tip.en);
 
                 techniqueModal.setAttribute('data-topic', topic);
                 techniqueOverlay.classList.add('visible');
@@ -1343,19 +1557,15 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 techniqueListenBtn.classList.add('speaking');
 
                 try {
-                    const langCode = body.getAttribute('lang') === 'hi' ? 'hi-IN' : 'en-US';
-                    const voiceName = langCode === 'hi-IN' ? 'Kore' : 'Zephyr';
+                    const ttsConfig = TTS_LANG_CONFIG[body.getAttribute('lang')] || TTS_LANG_CONFIG.en;
+                    const langCode = ttsConfig.code;
+                    const voiceName = ttsConfig.voice;
 
-                    const TTS_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${API_KEY}`;
-                    const payload = {
-                        contents: [{ parts: [{ text: content }] }],
-                        generationConfig: {
-                            responseModalities: ["AUDIO"],
-                            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceName } } }
-                        }
-                    };
+                    // TTS now goes through the Cloud Function proxy — it holds the
+                    // Gemini key server-side and builds the full request itself.
+                    const payload = { text: content, voiceName: voiceName };
 
-                    const response = await fetchWithBackoff(TTS_API_URL, {
+                    const response = await fetchWithBackoff(TTS_PROXY_URL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
