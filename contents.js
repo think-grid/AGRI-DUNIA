@@ -1,4 +1,4 @@
-const API_KEY = ""; 
+aconst API_KEY = ""; 
 
 /* =====================================================================
    GOOGLE SIGN-IN SETUP
@@ -13,7 +13,7 @@ const API_KEY = "";
    Until a real Client ID is set, the Google buttons stay hidden and
    the rest of the login flow (name/place/address) works as before.
    ===================================================================== */
-const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.googleusercontent.com";
+const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.googleusercontent.com";
 
 
         
@@ -457,10 +457,23 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                 localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
             }
 
-            function addProductListing(name, qty, price, imageDataUrl) {
+            // Farmers may only list products under these fixed categories.
+            const ALLOWED_PRODUCT_CATEGORIES = ['Vegetables', 'Fruits', 'Seeds', 'Tools'];
+            const CATEGORY_ICONS = {
+                'Vegetables': '🥦',
+                'Fruits': '🍎',
+                'Seeds': '🌱',
+                'Tools': '🛠️'
+            };
+
+            function addProductListing(name, qty, price, imageDataUrl, category) {
                 if (!currentUser || currentUser.role !== 'farmer') return;
                 if (!name || isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
                     showToast(translations[currentLang]['toast-error-fields'], false);
+                    return;
+                }
+                if (!ALLOWED_PRODUCT_CATEGORIES.includes(category)) {
+                    showToast(translations[currentLang]['toast-error-category'], false);
                     return;
                 }
                 if (!imageDataUrl) {
@@ -475,7 +488,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                     price: parseFloat(price),
                     farmerName: currentUser.name,
                     farmerPlace: currentUser.place || '',
-                    image: imageDataUrl
+                    image: imageDataUrl,
+                    category
                 });
                 saveProductListings(products);
                 renderProductListings();
@@ -533,7 +547,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                             <div class="listing-item">
                                 <div class="listing-item-content">
                                     ${p.image ? `<img src="${p.image}" alt="${p.name}" class="listing-item-thumb">` : ''}
-                                    <span><strong>${p.name}</strong> — ${p.qty > 0 ? `${p.qty} units left` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}</span>
+                                    <span>${p.category ? `<span class="category-badge">${CATEGORY_ICONS[p.category] || ''} ${p.category}</span>` : ''}<strong>${p.name}</strong> — ${p.qty > 0 ? `${p.qty} units left` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}</span>
                                 </div>
                                 <button class="remove-btn" onclick="removeProductListing('${p.id}')"><i class="fas fa-trash-alt"></i> Remove</button>
                             </div>
@@ -550,7 +564,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                             <div class="listing-item">
                                 <div class="listing-item-content">
                                     ${p.image ? `<img src="${p.image}" alt="${p.name}" class="listing-item-thumb">` : ''}
-                                    <span><strong>${p.name}</strong> — ${p.qty > 0 ? `${p.qty} units available` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}<br>
+                                    <span>${p.category ? `<span class="category-badge">${CATEGORY_ICONS[p.category] || ''} ${p.category}</span>` : ''}<strong>${p.name}</strong> — ${p.qty > 0 ? `${p.qty} units available` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}<br>
                                     <small>Sold by ${p.farmerName}${p.farmerPlace ? ', ' + p.farmerPlace : ''}</small></span>
                                 </div>
                                 ${p.qty > 0 ? `
@@ -992,11 +1006,14 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                     'sec-market-title': 'Digital Marketplace',
                     'sec-market-p': 'Buy and Sell farm products directly. Farmers can list their crops, and buyers can purchase them directly ensuring fair trade.',
                     'sell-title': 'Sell Your Products',
-                    'generate-title': 'Generate Product Listing ✨',
-                    'generate-button': 'Generate Description ✨',
-                    'listing-placeholder': 'Your professional product description will appear here.',
                     'sell-button': 'Post for Sale',
-                    'sell-image-label': 'Add a Photo of the Vegetable (required) 📷',
+                    'sell-category-label': 'Product Category (required)',
+                    'category-option-default': '-- Select Category --',
+                    'category-option-vegetables': '🥦 Vegetables',
+                    'category-option-fruits': '🍎 Fruits',
+                    'category-option-seeds': '🌱 Seeds',
+                    'category-option-tools': '🛠️ Tools',
+                    'sell-image-label': 'Add a Photo of the Product (required) 📷',
                     'cart-title': 'Your Cart',
                     'cart-empty': 'Your cart is empty.',
                     'sec-learning-title': 'Learning Hub',
@@ -1031,9 +1048,9 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                     'footer-visits': 'Total Visits: ',
                     'toast-success': 'Message sent successfully! We will contact you soon.',
                     'toast-error-fields': 'Please fill all marketplace fields correctly.',
-                    'toast-error-image': 'Please add a photo of the vegetable (from storage or camera) before selling.',
+                    'toast-error-image': 'Please add a photo of the product (from storage or camera) before selling.',
+                    'toast-error-category': 'Please select a category: Vegetables, Fruits, Seeds, or Tools.',
                     'toast-error-search': 'Please enter a product name to search.',
-                    'toast-error-listing': 'Please enter a product name and some key points for the listing generator.',
                     'alert-cart-add': (name) => `${name} added to cart!`,
                     'alert-pay-success': (amount) => `Payment of ₹${amount} successful! Thank you for your purchase.`,
                     'alert-pay-processing': (amount) => `Processing payment of ₹${amount}...`,
@@ -1054,11 +1071,14 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                     'sec-market-title': 'डिजिटल बाज़ार',
                     'sec-market-p': 'कृषि उत्पादों को सीधे खरीदें और बेचें। किसान अपनी फसलें सूचीबद्ध कर सकते हैं, और खरीदार सीधे खरीद सकते हैं, जिससे उचित व्यापार सुनिश्चित होगा।',
                     'sell-title': 'अपने उत्पाद बेचें',
-                    'generate-title': 'उत्पाद लिस्टिंग बनाएं ✨',
-                    'generate-button': 'विवरण बनाएं ✨',
-                    'listing-placeholder': 'आपका पेशेवर उत्पाद विवरण यहां दिखाई देगा।',
                     'sell-button': 'बिक्री के लिए पोस्ट करें',
-                    'sell-image-label': 'सब्ज़ी की फोटो जोड़ें (आवश्यक) 📷',
+                    'sell-category-label': 'उत्पाद श्रेणी (आवश्यक)',
+                    'category-option-default': '-- श्रेणी चुनें --',
+                    'category-option-vegetables': '🥦 सब्ज़ियाँ',
+                    'category-option-fruits': '🍎 फल',
+                    'category-option-seeds': '🌱 बीज',
+                    'category-option-tools': '🛠️ उपकरण',
+                    'sell-image-label': 'उत्पाद की फोटो जोड़ें (आवश्यक) 📷',
                     'cart-title': 'आपका कार्ट',
                     'cart-empty': 'आपका कार्ट खाली है।',
                     'sec-learning-title': 'सीखने का केंद्र',
@@ -1093,9 +1113,9 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                     'footer-visits': 'कुल विज़िट: ',
                     'toast-success': 'संदेश सफलतापूर्वक भेज दिया गया! हम जल्द ही आपसे संपर्क करेंगे।',
                     'toast-error-fields': 'कृपया बाज़ार के सभी फ़ील्ड सही ढंग से भरें।',
-                    'toast-error-image': 'बिक्री से पहले कृपया सब्ज़ी की फोटो जोड़ें (स्टोरेज या कैमरे से)।',
+                    'toast-error-image': 'बिक्री से पहले कृपया उत्पाद की फोटो जोड़ें (स्टोरेज या कैमरे से)।',
+                    'toast-error-category': 'कृपया एक श्रेणी चुनें: सब्ज़ियाँ, फल, बीज, या उपकरण।',
                     'toast-error-search': 'कृपया खोज के लिए उत्पाद का नाम दर्ज करें।',
-                    'toast-error-listing': 'कृपया लिस्टिंग जनरेटर के लिए उत्पाद का नाम और कुछ मुख्य बिंदु दर्ज करें।',
                     'alert-cart-add': (name) => `${name} कार्ट में जोड़ा गया!`,
                     'alert-pay-success': (amount) => `₹${amount} का भुगतान सफल रहा! आपकी खरीद के लिए धन्यवाद।`,
                     'alert-pay-processing': (amount) => `₹${amount} का भुगतान संसाधित हो रहा है...`,
@@ -1343,7 +1363,6 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                 contactForm.reset();
             });
             const sellButton = document.getElementById('postForSaleBtn');
-            const generateListingBtn = document.getElementById('generateListingBtn');
 
             const sellImageInput = document.getElementById('sellImage');
             const sellImagePreview = document.getElementById('sellImagePreview');
@@ -1369,70 +1388,26 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                 const name = document.getElementById('sellName').value.trim();
                 const qty = document.getElementById('sellQty').value;
                 const price = document.getElementById('sellPrice').value;
+                const category = document.getElementById('sellCategory').value;
+                if (!ALLOWED_PRODUCT_CATEGORIES.includes(category)) {
+                    showToast(translations[currentLang]['toast-error-category'], false);
+                    return;
+                }
                 if (!sellImageDataUrl) {
                     showToast(translations[currentLang]['toast-error-image'], false);
                     return;
                 }
-                addProductListing(name, qty, price, sellImageDataUrl);
+                addProductListing(name, qty, price, sellImageDataUrl, category);
                 document.getElementById('sellName').value = "";
                 document.getElementById('sellQty').value = "";
                 document.getElementById('sellPrice').value = "";
+                document.getElementById('sellCategory').value = "";
                 sellImageInput.value = "";
                 sellImageDataUrl = '';
                 sellImagePreview.style.display = 'none';
                 sellImagePreview.src = '';
             });
 
-            async function generateProductDescription(productName, keyPoints) {
-                const outputEl = document.getElementById('listingOutput');
-                outputEl.innerHTML = `<p style="color: var(--color-primary);"><i class="fas fa-spinner fa-spin"></i> Generating...</p>`;
-                
-                const userPrompt = `Generate a compelling and professional online marketplace description for the following product. Keep it concise (max 3 sentences) but highly attractive to buyers.
-                Product Name: ${productName}
-                Key Selling Points: ${keyPoints}`;
-
-                const payload = {
-                    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-                    // No Google Search grounding needed for creative generation
-                    systemInstruction: {
-                        parts: [{ text: "You are an expert agricultural copywriter for an online farmer's marketplace. You write attractive, trustworthy, and concise product listings in an informative but engaging tone." }]
-                    },
-                    config: {
-                        temperature: 0.7 // Higher temperature for more creative output
-                    }
-                };
-
-                try {
-                    const response = await fetchWithBackoff(CHAT_API_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    const result = await response.json();
-                    
-                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "❌ Failed to generate description. Check your network or try again.";
-                    
-                    outputEl.innerHTML = `<div class="message-bubble ai" style="display: block; border-radius: 6px; background: var(--color-background); color: var(--color-text); border: 1px dashed var(--color-accent);">${text}</div>`;
-                    showToast("Description generated successfully!", true);
-
-                } catch (error) {
-                    console.error("Gemini Listing Generation Error:", error);
-                    outputEl.innerHTML = `<p style="color: #d32f2f;"><i class="fas fa-exclamation-triangle"></i> Generation failed. Service error.</p>`;
-                    showToast("Error generating listing. Check console for details.", false);
-                }
-            }
-
-            generateListingBtn.addEventListener('click', function () {
-                const productName = document.getElementById('listingProductName').value.trim();
-                const keyPoints = document.getElementById('listingKeyPoints').value.trim();
-                
-                if (!productName || !keyPoints) {
-                    showToast(translations[currentLang]['toast-error-listing'], false);
-                    return;
-                }
-                generateProductDescription(productName, keyPoints);
-            });
-        
             const chatInput = document.getElementById("chatInput");
             const sendChatBtn = document.getElementById("sendChatBtn");
 
@@ -1462,6 +1437,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
             const drawerImageLabel = document.getElementById('drawerImageLabel');
             const drawerImageInput = document.getElementById('drawerImage');
             const drawerImagePreview = document.getElementById('drawerImagePreview');
+            const drawerCategoryLabel = document.getElementById('drawerCategoryLabel');
+            const drawerCategorySelect = document.getElementById('drawerCategory');
             let drawerImageDataUrl = '';
 
             drawerImageInput.addEventListener('change', () => {
@@ -1488,6 +1465,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                     : 'Enter the product you want to sell, set a price, and add a photo (mock listing).';
                 
                 drawerPriceInput.style.display = isBuy ? 'none' : 'block';
+                drawerCategoryLabel.style.display = isBuy ? 'none' : 'block';
+                drawerCategorySelect.style.display = isBuy ? 'none' : 'block';
                 drawerImageLabel.style.display = isBuy ? 'none' : 'block';
                 drawerImageInput.style.display = isBuy ? 'none' : 'block';
                 drawerActionBtn.textContent = isBuy ? 'Add Mock Item to Cart' : 'Post & Add to Cart';
@@ -1505,6 +1484,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                 document.getElementById('drawerName').value = '';
                 document.getElementById('drawerQty').value = '';
                 drawerPriceInput.value = '';
+                drawerCategorySelect.value = '';
                 drawerImageInput.value = '';
                 drawerImageDataUrl = '';
                 drawerImagePreview.style.display = 'none';
@@ -1528,15 +1508,20 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
 
                 if (type === 'sell') {
                     const price = document.getElementById('drawerPrice').value;
+                    const category = drawerCategorySelect.value;
                     if (isNaN(price) || parseFloat(price) <= 0) {
                         showToast("Please enter a valid price to sell.", false);
+                        return;
+                    }
+                    if (!ALLOWED_PRODUCT_CATEGORIES.includes(category)) {
+                        showToast(translations[currentLang]['toast-error-category'], false);
                         return;
                     }
                     if (!drawerImageDataUrl) {
                         showToast(translations[currentLang]['toast-error-image'], false);
                         return;
                     }
-                    addProductListing(name, qty, price, drawerImageDataUrl);
+                    addProductListing(name, qty, price, drawerImageDataUrl, category);
                 } else {
                     const price = 100; // Default price for mock buy
                     addToCart(name, qty, price);
