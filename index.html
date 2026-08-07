@@ -7,8 +7,2961 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-     <link rel="stylesheet" href="style.css">
-     <script src="contents.js"></script>
+     <style>
+:root {
+            /* Day Theme (Green & Earthy) */
+            --color-primary: #388e3c; /* Dark Green */
+            --color-secondary: #689f38; /* Lighter Green */
+            --color-accent: #ff9800; /* Amber/Harvest */
+            --color-text: #333333; /* Dark Text */
+            --color-background: #f1f8e9; /* Very Light Beige/Green */
+            --color-card-bg: #ffffff;
+            --color-card-border: #c8e6c9;
+            --color-navbar-bg: #2e7d32;
+            --color-navbar-hover: #4caf50;
+            --color-shadow: rgba(0, 0, 0, 0.1);
+            --transition-speed: 0.3s;
+            --drawer-width: 90%;
+        }
+
+        /* Night Theme (Darker Earth Tones) */
+        .dark-mode {
+            --color-primary: #1b5e20;
+            --color-secondary: #33691e;
+            --color-accent: #fbc02d;
+            --color-text: #e0e0e0;
+            --color-background: #121212;
+            --color-card-bg: #1e1e1e;
+            --color-card-border: #383838;
+            --color-navbar-bg: #000000;
+            --color-navbar-hover: #333333;
+            --color-shadow: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        /* ========================================= */
+        /* LOGIN / ROLE SELECTION OVERLAY */
+        /* ========================================= */
+        #mainAppTop, #mainAppFooter {
+            display: none;
+        }
+        body.logged-in #mainAppTop, body.logged-in #mainAppFooter {
+            display: block;
+        }
+
+        #loginOverlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+            z-index: 3000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        body.logged-in #loginOverlay {
+            display: none;
+        }
+        #loginModal {
+            background: var(--color-card-bg);
+            color: var(--color-text);
+            border-radius: 16px;
+            padding: 35px 30px;
+            width: 100%;
+            max-width: 480px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+            animation: loginPopIn 0.4s ease-out;
+        }
+        @keyframes loginPopIn {
+            from { opacity: 0; transform: translateY(20px) scale(0.97); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .login-brand {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        .login-brand h1 {
+            font-size: 1.8em;
+            color: var(--color-primary);
+            margin-bottom: 5px;
+        }
+        .login-brand p {
+            margin: 0;
+            opacity: 0.8;
+        }
+        .role-cards {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        .role-card {
+            background: var(--color-background);
+            border: 2px solid var(--color-card-border);
+            border-radius: 12px;
+            padding: 22px 14px;
+            text-align: center;
+            cursor: pointer;
+            color: var(--color-text);
+            transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+        }
+        .role-card:hover, .role-card:focus {
+            transform: translateY(-4px);
+            border-color: var(--color-primary);
+            box-shadow: 0 8px 18px var(--color-shadow);
+        }
+        .role-card i {
+            font-size: 2.2em;
+            color: var(--color-primary);
+            margin-bottom: 10px;
+            display: block;
+        }
+        .role-card h3 {
+            margin: 6px 0;
+            font-size: 1.1em;
+        }
+        .role-card p {
+            margin: 0;
+            font-size: 0.85em;
+            opacity: 0.75;
+        }
+        @media (max-width: 480px) {
+            .role-cards { grid-template-columns: 1fr; }
+        }
+
+        .login-form h3 {
+            color: var(--color-primary);
+            margin: 4px 0 15px;
+        }
+        .login-form label {
+            display: block;
+            font-weight: 600;
+            font-size: 0.9em;
+            margin: 12px 0 6px;
+        }
+        .login-form input[type="text"],
+        .login-form input[type="file"] {
+            width: 100%;
+            padding: 11px;
+            border-radius: 6px;
+            border: 1px solid var(--color-card-border);
+            background: var(--color-background);
+            color: var(--color-text);
+            font-size: 15px;
+        }
+        #farmerPhotoPreview {
+            display: block;
+            width: 72px;
+            height: 72px;
+            object-fit: cover;
+            border-radius: 50%;
+            margin-top: 10px;
+            border: 2px solid var(--color-primary);
+        }
+        .login-form button[type="submit"] {
+            width: 100%;
+            margin-top: 20px;
+            padding: 13px;
+            background: var(--color-primary);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .login-form button[type="submit"]:hover {
+            background: var(--color-secondary);
+        }
+        .back-link {
+            background: none;
+            border: none;
+            color: var(--color-text);
+            opacity: 0.7;
+            cursor: pointer;
+            font-size: 0.9em;
+            padding: 0;
+            margin-bottom: 10px;
+        }
+        .back-link:hover {
+            opacity: 1;
+            color: var(--color-primary);
+        }
+
+        /* ========================================= */
+        /* GOOGLE SIGN-IN (login forms) */
+        /* ========================================= */
+        .google-btn-slot {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 14px;
+            min-height: 40px;
+        }
+        .google-btn-slot:empty {
+            display: none;
+        }
+        .google-divider {
+            display: flex;
+            align-items: center;
+            text-align: center;
+            color: var(--color-text);
+            opacity: 0.6;
+            font-size: 0.8em;
+            margin-bottom: 14px;
+        }
+        .google-btn-slot:empty + .google-divider {
+            display: none;
+        }
+        .google-divider::before,
+        .google-divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid var(--color-card-border);
+        }
+        .google-divider span {
+            padding: 0 10px;
+            white-space: nowrap;
+        }
+
+        /* ========================================= */
+        /* PROFILE BAR (header) */
+        /* ========================================= */
+        #profileBar {
+            display: none;
+            width: auto;
+            height: auto;
+            border-radius: 30px;
+            background: rgba(255,255,255,0.15);
+            padding: 4px 10px 4px 4px;
+        }
+        body.logged-in #profileBar {
+            display: flex;
+        }
+        .profile-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .profile-avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background-color: var(--color-accent);
+            background-size: cover;
+            background-position: center;
+            color: #2b2b2b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.85em;
+            flex-shrink: 0;
+        }
+        .profile-text {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.2;
+            color: #fff;
+        }
+        #profileName {
+            font-weight: 700;
+            font-size: 0.85em;
+        }
+        #profileRole {
+            font-size: 0.72em;
+            opacity: 0.85;
+        }
+        #logoutBtn {
+            background: rgba(255,255,255,0.25);
+            border: none;
+            color: #fff;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        #logoutBtn:hover {
+            background: #d32f2f;
+        }
+        @media (max-width: 700px) {
+            .profile-text { display: none; }
+        }
+
+        /* ========================================= */
+        /* NOTIFICATION BELL (Farmer purchase alerts) */
+        /* ========================================= */
+        .notif-bell-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 16px;
+            position: relative;
+        }
+        .notif-badge {
+            position: absolute;
+            top: -3px;
+            right: -3px;
+            background: #d32f2f;
+            color: #fff;
+            font-size: 0.62em;
+            font-weight: 700;
+            min-width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            align-items: center;
+            justify-content: center;
+            padding: 0 3px;
+            line-height: 1;
+        }
+        .notif-dropdown {
+            display: none;
+            position: absolute;
+            top: 130%;
+            right: 0;
+            width: 280px;
+            max-height: 320px;
+            overflow-y: auto;
+            background: var(--color-card-bg);
+            color: var(--color-text);
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            z-index: 60;
+            padding: 8px;
+            text-align: left;
+        }
+        .notif-dropdown.open {
+            display: block;
+        }
+        .notif-item {
+            padding: 10px;
+            border-bottom: 1px solid var(--color-card-border);
+            font-size: 0.85em;
+            line-height: 1.4;
+        }
+        .notif-item:last-child { border-bottom: none; }
+        .notif-item.unread {
+            background: rgba(56, 142, 60, 0.1);
+            border-radius: 6px;
+        }
+        .notif-item .notif-time {
+            display: block;
+            font-size: 0.8em;
+            opacity: 0.65;
+            margin-top: 3px;
+        }
+        .notif-empty {
+            padding: 16px;
+            text-align: center;
+            opacity: 0.7;
+            font-size: 0.85em;
+            margin: 0;
+        }
+
+        /* ========================================= */
+        /* ROLE-BASED VISIBILITY (Farmer vs Buyer menus) */
+        /* ========================================= */
+        .farmer-only, .buyer-only {
+            display: none;
+        }
+        body.role-farmer .farmer-only {
+            display: block;
+        }
+        body.role-buyer .buyer-only {
+            display: block;
+        }
+        /* buttons need inline-block instead of block */
+        body.role-farmer button.farmer-only,
+        body.role-buyer button.buyer-only {
+            display: inline-block;
+        }
+
+        /* ========================================= */
+        /* PRODUCT LISTINGS PANEL (My Listings / Available Products) */
+        /* ========================================= */
+        .listings-panel {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 8px;
+            background: var(--color-background);
+            border: 1px dashed var(--color-secondary);
+        }
+        .listing-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            background: var(--color-card-bg);
+            border-left: 4px solid var(--color-primary);
+            border-radius: 6px;
+            padding: 12px 14px;
+            margin: 8px 0;
+        }
+        .listing-item button {
+            background: var(--color-primary);
+            color: #fff;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            white-space: nowrap;
+            transition: background 0.3s;
+        }
+        .listing-item button:hover {
+            background: var(--color-secondary);
+        }
+        .listing-item .remove-btn {
+            background: #d32f2f;
+        }
+        .listing-item .remove-btn:hover {
+            background: #b71c1c;
+        }
+        .listing-item-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .listing-item-thumb {
+            width: 56px;
+            height: 56px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 1px solid var(--color-card-border);
+            flex-shrink: 0;
+        }
+
+        /* ========================================= */
+        /* PRODUCT PHOTO UPLOAD (Sell forms & drawer) */
+        /* ========================================= */
+        .sell-image-label {
+            display: block;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.9em;
+            margin: 10px 0 6px;
+            color: var(--color-text);
+        }
+        .product-image-preview {
+            display: block;
+            width: 100%;
+            max-width: 160px;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin: 10px auto;
+            border: 2px solid var(--color-primary);
+        }
+
+        html {
+            scroll-behavior: smooth;
+            /* Disable native overflow-x for the sliding panel effect */
+            overflow-x: hidden;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+            background: var(--color-background);
+            color: var(--color-text);
+            transition: background-color var(--transition-speed), color var(--transition-speed);
+            position: relative;
+            /* Parallax Effect Base */
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"><rect width="100%" height="100%" fill="%23f1f8e9"/><circle cx="5%" cy="10%" r="20" fill="%23c8e6c9" opacity="0.5"><animate attributeName="cx" values="5%; 95%; 5%" dur="30s" repeatCount="indefinite"/></circle><circle cx="95%" cy="15%" r="30" fill="%23c8e6c9" opacity="0.4"><animate attributeName="cx" values="95%; 5%; 95%" dur="40s" repeatCount="indefinite"/></circle></svg>');
+            background-size: cover;
+            background-attachment: fixed; /* Parallax effect */
+        }
+        .dark-mode body {
+            background-image: none; /* Disable complex background for dark mode */
+        }
+
+        
+        /* 2. SECTION INTERACTIONS - FIXED NAVBAR */
+        .header-content {
+            padding: 40px 20px 20px;
+            text-align: center;
+        }
+        
+        header {
+            background: var(--color-primary);
+            color: #fff;
+            box-shadow: 0 4px 6px var(--color-shadow);
+            position: relative;
+        }
+
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            background: var(--color-navbar-bg);
+            box-shadow: 0 2px 4px var(--color-shadow);
+            flex-wrap: wrap;
+            padding: 0;
+        }
+
+        .nav-link {
+            color: #fff;
+            text-decoration: none;
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            transition: background var(--transition-speed), color var(--transition-speed);
+            position: relative;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            background: var(--color-navbar-hover);
+            color: #fff;
+        }
+        
+        .nav-link.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--color-accent);
+            animation: slideIn 0.3s forwards;
+        }
+
+        @keyframes slideIn {
+            from { width: 0; }
+            to { width: 100%; }
+        }
+
+        
+        /* 3. FUNCTIONAL ENHANCEMENTS - TOGGLE & COUNTER */
+        
+        .controls-panel {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .theme-toggle, .lang-toggle, .tts-button {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s, transform 0.1s, box-shadow 0.3s;
+            line-height: 1;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .theme-toggle:hover, .lang-toggle:hover, .tts-button:hover {
+            background: var(--color-accent);
+        }
+        .theme-toggle:active, .lang-toggle:active, .tts-button:active {
+            transform: scale(0.95);
+        }
+
+        
+        /* OTHER DESIGN ELEMENTS-INTRO BANNER */
+        
+        #welcome-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: var(--color-accent);
+            color: #333;
+            text-align: center;
+            padding: 15px 0;
+            font-weight: 700;
+            font-size: 1.2em;
+            z-index: 1001;
+            transform: translateY(-100%);
+            animation: slideDown 0.5s ease-out 0.5s forwards, fadeOutBanner 0.5s 4s forwards;
+            pointer-events: none;
+        }
+        
+        @keyframes slideDown {
+            to { transform: translateY(0); }
+        }
+        @keyframes fadeOutBanner {
+            0% { opacity: 1; pointer-events: auto; }
+            100% { opacity: 0; pointer-events: none; }
+        }
+
+        
+        /* GENERAL LAYOUT,STYLING  */
+        
+        .container {
+            padding: 20px;
+            max-width: 1200px;
+            margin: 40px auto;
+            position: relative;
+            min-height: 800px;
+            /* Container for sliding panels */
+            overflow: hidden; 
+        }
+        
+        section {
+            margin-bottom: 60px;
+            padding: 30px;
+            background: var(--color-card-bg);
+            border-radius: 12px;
+            box-shadow: 0 8px 15px var(--color-shadow);
+            
+            /* SLIDING PANEL CSS OVERRIDE */
+            position: absolute; 
+            width: 100%;
+            top: 0;
+            left: 0;
+            transform: translateX(100%);
+            opacity: 0;
+            transition: transform 0.6s ease-in-out, opacity 0.4s ease-in-out;
+        }
+        
+        /* Initial state of the first section */
+        #marketplace {
+            transform: translateX(0);
+            opacity: 1;
+        }
+
+        .active-panel {
+            transform: translateX(0) !important;
+            opacity: 1 !important;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2); /* Added depth */
+        }
+        .hidden-panel-left {
+            transform: translateX(-100%) !important;
+            opacity: 0;
+        }
+        .hidden-panel-right {
+            transform: translateX(100%) !important;
+            opacity: 0;
+        }
+        /* END SLIDING PANEL CSS */
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-weight: 700;
+            font-size: 2.5em;
+            margin: 0;
+        }
+
+        h2 {
+            color: var(--color-primary);
+            border-bottom: 3px solid var(--color-secondary);
+            padding-bottom: 5px;
+            display: inline-block;
+            margin-top: 0;
+            font-weight: 600;
+        }
+        
+        /* ========================================= */
+        /* MARKETPLACE CARDS */
+        /* ========================================= */
+        .market-form {
+            background: var(--color-background);
+            padding: 25px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border: 1px solid var(--color-card-border);
+            box-shadow: 0 4px 8px var(--color-shadow);
+            transition: transform 0.3s;
+        }
+        .market-form:hover {
+            transform: translateY(-5px);
+        }
+        .market-form input, .market-form button {
+            display: block;
+            width: 100%;
+            margin: 10px 0;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid var(--color-card-border);
+            font-size: 16px;
+            background: var(--color-card-bg);
+            color: var(--color-text);
+        }
+        .market-form button {
+            background: var(--color-primary);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s, box-shadow 0.1s, transform 0.1s;
+        }
+        .market-form button:hover {
+            background: var(--color-secondary);
+        }
+        .market-form button:active {
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+            transform: scale(0.99);
+        }
+        
+        /* Cart Styling */
+        #cartSection {
+            margin-top: 20px;
+            border: 2px dashed var(--color-primary);
+        }
+        #cartItems > div {
+            background: var(--color-background);
+            border-left: 4px solid var(--color-secondary);
+        }
+        #cartItems button {
+            background: #d32f2f !important;
+            padding: 5px 10px !important;
+            width: auto !important;
+            display: inline-block !important;
+            margin: 0 !important;
+            vertical-align: middle;
+        }
+
+        /* ========================================= */
+        /* 6. LEARNING HUB CARDS & AI INTEGRATION */
+        /* ========================================= */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .learning-card {
+            background: var(--color-card-bg);
+            border: 1px solid var(--color-card-border);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 10px var(--color-shadow);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .learning-card:hover {
+            transform: translateY(-5px) scale(1.02);
+            box-shadow: 0 10px 20px var(--color-shadow);
+        }
+        .learning-card i {
+            color: var(--color-accent);
+            font-size: 2em;
+            margin-bottom: 15px;
+            display: block;
+        }
+        
+        #ai-recommendation {
+            background: var(--color-primary);
+            color: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            margin-top: 40px;
+            text-align: center;
+            border: 5px dashed var(--color-accent);
+        }
+        #ai-recommendation h3 {
+            margin-top: 0;
+            color: var(--color-accent);
+        }
+
+        /* CHAT STYLING FOR AGRI-GEMINI */
+        #agriChatContainer {
+            background: var(--color-card-bg);
+            padding: 20px;
+            border-radius: 8px;
+        }
+        #chatHistory {
+            transition: opacity 0.3s;
+        }
+        .chat-message {
+            margin: 8px 0;
+            display: flex;
+        }
+        .chat-message.user {
+            justify-content: flex-end;
+        }
+        .chat-message.ai {
+            justify-content: flex-start;
+        }
+        .message-bubble {
+            max-width: 85%;
+            padding: 10px 15px;
+            border-radius: 18px;
+            line-height: 1.4;
+            font-size: 0.9em;
+            word-wrap: break-word; /* Ensure text wraps */
+        }
+        .chat-message.user .message-bubble {
+            background: var(--color-primary);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        .chat-message.ai .message-bubble {
+            background: var(--color-card-border);
+            color: var(--color-text);
+            border-bottom-left-radius: 4px;
+            text-align: left;
+        }
+        .chat-message.ai a {
+            color: var(--color-primary);
+            font-weight: 600;
+        }
+
+        /* Typing animation */
+        .typing-dots {
+            display: inline-block;
+            width: 20px;
+            height: 1.2em;
+            overflow: hidden;
+            text-align: left;
+        }
+        .typing-dots::after {
+            content: " .";
+            display: inline-block;
+            animation: dots 1s steps(5, end) infinite;
+        }
+        @keyframes dots {
+            0%, 20% { content: "."; }
+            40% { content: ".."; }
+            60%, 100% { content: "..."; }
+        }
+    
+        
+        /* ========================================= */
+        /* VIDEOS & SCHEMES */
+        /* ========================================= */
+        .video-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .video-wrapper {
+            overflow: hidden;
+            padding-top: 56.25%; /* 16:9 aspect ratio */
+            position: relative;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px var(--color-shadow);
+        }
+        .video-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .scheme-list {
+            list-style: none;
+            padding: 0;
+            margin-top: 20px;
+        }
+        .scheme-list li {
+            margin: 15px 0;
+            padding: 15px;
+            background: var(--color-background);
+            border-left: 5px solid var(--color-secondary);
+            border-radius: 6px;
+            transition: background 0.3s;
+        }
+        .scheme-list li:hover {
+            background: var(--color-card-border);
+        }
+        .scheme-list a {
+            color: var(--color-primary);
+            font-weight: 600;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+        .scheme-list a:hover {
+            color: var(--color-accent);
+            text-decoration: underline;
+        }
+
+        /* ========================================= */
+        /* 5. CONTACT PANEL */
+        /* ========================================= */
+        #contact {
+            background: var(--color-primary);
+            color: #fff;
+            padding: 50px;
+            border-radius: 12px;
+        }
+        #contact h2 {
+            color: #fff;
+            border-bottom-color: var(--color-accent);
+        }
+        .contact-form label {
+            display: block;
+            margin-top: 15px;
+            font-weight: 600;
+        }
+        .contact-form input[type="text"], 
+        .contact-form input[type="email"], 
+        .contact-form textarea {
+            width: 100%;
+            padding: 12px;
+            margin-top: 5px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+            background: #fff;
+            color: var(--color-text);
+        }
+        .contact-form button {
+            background: var(--color-accent);
+            color: var(--color-text);
+            padding: 15px 25px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 20px;
+            font-weight: 700;
+            font-size: 1.1em;
+            transition: background 0.3s, box-shadow 0.1s, transform 0.1s;
+        }
+        .contact-form button:hover {
+            background: #fbc02d;
+        }
+        .contact-form button:active {
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            transform: scale(0.99);
+        }
+
+        /* TOAST Notification */
+        #toast-message {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 16px;
+            position: fixed;
+            z-index: 1002;
+            right: 30px;
+            bottom: 30px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            font-weight: 600;
+            transition: background-color 0.3s;
+        }
+        #toast-message.show {
+            visibility: visible;
+            animation: fadeIn 0.5s;
+        }
+        @keyframes fadeIn { from { bottom: 0; opacity: 0; } to { bottom: 30px; opacity: 1; } }
+        /* Note: Fade out is handled by JS removing the 'show' class */
+
+        /* ========================================= */
+        /* FOOTER & VISITOR */
+        /* ========================================= */
+        footer {
+            background: var(--color-navbar-bg);
+            color: #fff;
+            text-align: center;
+            padding: 15px 0;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            font-size: 0.9em;
+            margin-top: 40px; /* Add margin to separate from content */
+        }
+        .visitor-counter {
+            background: var(--color-primary);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-weight: 600;
+        }
+
+        /* Animation for personal visitor counter update */
+        .personal-visits-glow {
+            transition: box-shadow 0.5s ease-out;
+        }
+        .personal-visits-glow.highlight {
+            box-shadow: 0 0 15px var(--color-accent), 0 0 5px var(--color-accent) inset;
+        }
+
+
+        /* ========================================= */
+        /* BUY/SELL */
+        /* ========================================= */
+        #drawerOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1050;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+        #buySellDrawer {
+            position: fixed;
+            bottom: 0;
+            right: 0;
+            width: 50%; /* Default desktop width */
+            max-width: 500px;
+            height: 100%;
+            background: var(--color-card-bg);
+            box-shadow: -5px 0 20px rgba(0, 0, 0, 0.3);
+            z-index: 1051;
+            transform: translateX(100%);
+            transition: transform 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+            padding: 20px;
+            overflow-y: auto;
+        }
+        #drawerOverlay.visible {
+            display: block;
+            opacity: 1;
+        }
+        #buySellDrawer.visible {
+            transform: translateX(0);
+        }
+        #buySellDrawer h3 {
+            color: var(--color-primary);
+            border-bottom: 2px solid var(--color-accent);
+            padding-bottom: 10px;
+        }
+        .close-button {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: transparent;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            color: var(--color-text);
+            transition: color 0.2s;
+        }
+        .close-button:hover {
+            color: #d32f2f;
+        }
+
+        /* Responsive Drawer */
+        @media (max-width: 768px) {
+            #buySellDrawer {
+                width: 100%;
+                max-width: none;
+                height: 75%;
+                bottom: 0;
+                top: auto;
+                transform: translateY(100%);
+                box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.3);
+            }
+            #buySellDrawer.visible {
+                transform: translateY(0);
+            }
+        }
+
+        /* ========================================= */
+        /* RESPONSIVENESS part */
+        /* ========================================= */
+        @media (max-width: 768px) {
+            :root {
+                --drawer-width: 100%;
+            }
+            .navbar {
+                justify-content: space-between;
+                padding: 0 10px;
+            }
+            .nav-link {
+                padding: 10px 10px;
+                font-size: 0.9em;
+            }
+            .nav-link i {
+                /* Hide icon text on small screens to save space */
+                display: none; 
+            }
+            h1 {
+                font-size: 2em;
+            }
+            .controls-panel {
+                top: 10px;
+                right: 10px;
+            }
+            section {
+                padding: 20px;
+            }
+            footer {
+                flex-direction: column;
+                gap: 10px;
+            }
+            .container {
+                margin: 20px auto;
+                min-height: 1000px; /* Increase min-height for mobile layouts */
+            }
+        }
+        
+        /* ========================================= */
+        /* 7. TOOLTIPS part */
+        /* ========================================= */
+        .tooltip-container {
+            position: relative;
+            display: inline-block;
+        }
+        .tooltip-container .tooltip-text {
+            visibility: hidden;
+            width: 120px;
+            background-color: var(--color-text);
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px 0;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -60px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 0.8em;
+        }
+        .tooltip-container:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        /* ========================================= */
+        /* 8. LEARNING CARDS -> now tappable */
+        /* ========================================= */
+        .learning-card {
+            cursor: pointer;
+            position: relative;
+            padding-bottom: 40px;
+        }
+        .learning-card:focus {
+            outline: 3px solid var(--color-accent);
+            outline-offset: 2px;
+        }
+        .learning-card .tap-hint {
+            position: absolute;
+            left: 20px;
+            bottom: 14px;
+            font-family: 'Kalam', cursive;
+            font-size: 0.85em;
+            color: var(--color-secondary);
+            font-weight: 700;
+        }
+
+        /* ========================================= */
+        /* 9. EASY LEARNING GUIDE - "hand-made" notebook modal */
+        /* ========================================= */
+        #techniqueOverlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(30, 20, 10, 0.55);
+            z-index: 2050;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.25s ease-in-out;
+        }
+        #techniqueOverlay.visible {
+            display: block;
+            opacity: 1;
+        }
+        #techniqueModal {
+            position: fixed;
+            top: 50%; left: 50%;
+            width: 92%;
+            max-width: 620px;
+            max-height: 88vh;
+            overflow-y: auto;
+            background: #fffdf5;
+            background-image: repeating-linear-gradient(
+                to bottom,
+                transparent 0px,
+                transparent 33px,
+                rgba(56, 142, 60, 0.08) 34px
+            );
+            border-radius: 14px 18px 16px 20px;
+            box-shadow: 0 20px 45px rgba(0,0,0,0.35);
+            z-index: 2051;
+            padding: 28px 26px 30px;
+            transform: translate(-50%, -50%) scale(0.9) rotate(-1deg);
+            opacity: 0;
+            visibility: hidden;
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease;
+            border: 2px solid #e4dcc0;
+        }
+        #techniqueModal.visible {
+            transform: translate(-50%, -50%) scale(1) rotate(-0.6deg);
+            opacity: 1;
+            visibility: visible;
+        }
+        .dark-mode #techniqueModal {
+            background: #23261f;
+            background-image: repeating-linear-gradient(
+                to bottom,
+                transparent 0px,
+                transparent 33px,
+                rgba(255, 255, 255, 0.05) 34px
+            );
+            border-color: #3a3d33;
+        }
+        #techniqueModal .pin {
+            position: absolute;
+            top: -14px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 22px;
+            height: 22px;
+            background: radial-gradient(circle at 30% 30%, #ff6b6b, #b02a2a);
+            border-radius: 50%;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.35);
+        }
+        #techniqueModal .tape {
+            position: absolute;
+            width: 70px;
+            height: 26px;
+            background: rgba(255, 244, 176, 0.75);
+            border: 1px solid rgba(0,0,0,0.05);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+        }
+        #techniqueModal .tape-left {
+            top: -10px;
+            left: 10px;
+            transform: rotate(-25deg);
+        }
+        #techniqueModal .tape-right {
+            top: -10px;
+            right: 10px;
+            transform: rotate(20deg);
+        }
+        #techniqueModal .close-button {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            z-index: 5;
+        }
+        .technique-header {
+            text-align: center;
+            margin-top: 6px;
+            margin-bottom: 6px;
+        }
+        .technique-emoji {
+            font-size: 2.6em;
+            display: block;
+            margin-bottom: 4px;
+        }
+        .technique-header h3 {
+            font-family: 'Kalam', cursive;
+            font-weight: 700;
+            font-size: 1.6em;
+            color: var(--color-primary);
+            text-decoration: underline;
+            text-decoration-style: wavy;
+            text-decoration-color: var(--color-accent);
+            text-underline-offset: 6px;
+            margin: 0;
+        }
+        .listen-btn {
+            display: block;
+            margin: 14px auto 18px;
+            background: var(--color-accent);
+            color: #2b2b2b;
+            font-family: 'Kalam', cursive;
+            font-weight: 700;
+            font-size: 1em;
+            padding: 8px 20px;
+            border: 2px dashed #7a5a00;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .listen-btn:hover {
+            transform: scale(1.05);
+        }
+        .listen-btn.speaking {
+            background: var(--color-secondary);
+            color: #fff;
+            border-color: #ffffff;
+        }
+
+        /* Icon-flow diagram */
+        .technique-diagram {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            background: rgba(56, 142, 60, 0.06);
+            border: 2px dashed var(--color-secondary);
+            border-radius: 16px;
+            padding: 18px 10px;
+            margin-bottom: 20px;
+        }
+        .diagram-node {
+            width: 58px;
+            height: 58px;
+            border-radius: 50%;
+            background: var(--color-card-bg);
+            border: 2px solid var(--color-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.7em;
+            box-shadow: 2px 3px 0 rgba(0,0,0,0.12);
+        }
+        .diagram-node:nth-child(4n+1) { transform: rotate(-4deg); }
+        .diagram-node:nth-child(4n+2) { transform: rotate(3deg); }
+        .diagram-node:nth-child(4n+3) { transform: rotate(-2deg); }
+        .diagram-arrow {
+            font-size: 1.4em;
+            color: var(--color-accent);
+            font-weight: 700;
+        }
+
+        /* Step notes - like little sticky notes on a notebook page */
+        .technique-steps-label {
+            font-family: 'Kalam', cursive;
+            font-weight: 700;
+            font-size: 1.1em;
+            color: var(--color-text);
+            margin-bottom: 8px;
+        }
+        .technique-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+        .technique-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            background: var(--color-card-bg);
+            border: 1px solid var(--color-card-border);
+            border-left: 5px solid var(--color-secondary);
+            border-radius: 4px 10px 10px 4px;
+            padding: 10px 12px;
+            font-family: 'Kalam', cursive;
+            font-size: 1.02em;
+            line-height: 1.4;
+            color: var(--color-text);
+            box-shadow: 1px 2px 0 rgba(0,0,0,0.08);
+        }
+        .technique-step:nth-child(odd) { transform: rotate(-0.4deg); }
+        .technique-step:nth-child(even) { transform: rotate(0.4deg); }
+        .technique-step .step-num {
+            flex: 0 0 auto;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--color-primary);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.9em;
+        }
+        .technique-step .step-icon {
+            font-size: 1.3em;
+            flex: 0 0 auto;
+        }
+        .technique-tip {
+            font-family: 'Kalam', cursive;
+            font-size: 1em;
+            background: rgba(255, 244, 176, 0.6);
+            border: 2px dashed var(--color-accent);
+            border-radius: 10px;
+            padding: 12px 14px;
+            color: #5a4300;
+        }
+        .dark-mode .technique-tip {
+            background: rgba(255, 244, 176, 0.15);
+            color: #ffe9a8;
+        }
+
+        @media (max-width: 600px) {
+            #techniqueModal {
+                width: 94%;
+                padding: 24px 16px 26px;
+            }
+            .technique-header h3 {
+                font-size: 1.3em;
+            }
+            .diagram-node {
+                width: 48px;
+                height: 48px;
+                font-size: 1.4em;
+            }
+        }
+</style>
+     <script>
+const API_KEY = ""; 
+
+/* =====================================================================
+   GOOGLE SIGN-IN SETUP
+   -------------------------------------------------------------------
+   To turn on "Continue with Google":
+   1. Go to https://console.cloud.google.com/apis/credentials
+   2. Create an OAuth 2.0 Client ID (type: "Web application")
+   3. Under "Authorized JavaScript origins", add the exact URL(s) this
+      site will be served from (e.g. https://your-site.com — no
+      trailing slash; add http://localhost:PORT too if testing locally)
+   4. Paste the Client ID below, replacing the placeholder.
+   Until a real Client ID is set, the Google buttons stay hidden and
+   the rest of the login flow (name/place/address) works as before.
+   ===================================================================== */
+const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.googleusercontent.com";
+
+
+        
+        async function fetchWithBackoff(url, options, maxRetries = 3) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.status !== 429 && response.ok) {
+                        return response;
+                    } else if (response.status === 429 || !response.ok) {
+                        // Rate limit or other error, retry with backoff
+                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    } else {
+                        throw new Error(`API call failed with status: ${response.status}`);
+                    }
+                } catch (error) {
+                    if (i === maxRetries - 1) throw error;
+                    // Wait before retrying
+                    const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+            throw new Error("API call failed after maximum retries");
+        }
+
+        function base64ToArrayBuffer(base64) {
+            const binary_string = window.atob(base64);
+            const len = binary_string.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binary_string.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function pcmToWav(pcm16, sampleRate) {
+            const buffer = new ArrayBuffer(44 + pcm16.length * 2);
+            const view = new DataView(buffer);
+            let offset = 0;
+
+            
+            view.setUint32(offset, 0x52494646, false); offset += 4; // 'RIFF'
+            view.setUint32(offset, 36 + pcm16.length * 2, true); offset += 4; // File size
+            view.setUint32(offset, 0x57415645, false); offset += 4; // 'WAVE'
+
+            
+            view.setUint32(offset, 0x666d7420, false); offset += 4; // 'fmt '
+            view.setUint32(offset, 16, true); offset += 4; // Chunk size (16 for PCM)
+            view.setUint16(offset, 1, true); offset += 2; // Format tag (1 for PCM)
+            view.setUint16(offset, 1, true); offset += 2; // Channels (1, mono)
+            view.setUint32(offset, sampleRate, true); offset += 4; // Sample rate
+            view.setUint32(offset, sampleRate * 2, true); offset += 4; // Byte rate (SampleRate * Channels * BitsPerSample/8)
+            view.setUint16(offset, 2, true); offset += 2; // Block align (Channels * BitsPerSample/8)
+            view.setUint16(offset, 16, true); offset += 2; // Bits per sample (16)
+
+        
+            view.setUint32(offset, 0x64617461, false); offset += 4; // 'data'
+            view.setUint32(offset, pcm16.length * 2, true); offset += 4; // Data size
+
+            
+            for (let i = 0; i < pcm16.length; i++, offset += 2) {
+                view.setInt16(offset, pcm16[i], true);
+            }
+
+            return new Blob([buffer], { type: 'audio/wav' });
+        }
+        const AGRI_GEMINI_MODEL = 'gemini-2.5-flash-preview-09-2025';
+        const CHAT_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${AGRI_GEMINI_MODEL}:generateContent?key=${API_KEY}`;
+        
+        let chatHistory = [{
+            role: "user", 
+            parts: [{ text: "You are Agri-Gemini, an expert agricultural advisor. Your response must be concise, accurate, and actionable for farmers. Always use Google Search for grounding and up-to-date information." }]
+        }];
+        
+        function appendMessage(role, text, sources = []) {
+            const chatHistoryEl = document.getElementById("chatHistory");
+            const messageDiv = document.createElement("div");
+            messageDiv.className = `chat-message ${role}`;
+
+            let content = text;
+            if (sources.length > 0) {
+                const sourceLinks = sources.map((s, i) => 
+                    `<a href="${s.uri}" target="_blank" rel="noopener noreferrer" title="${s.title || 'Source'}"> [${i+1}]</a>`
+                ).join('');
+                content += `<p style="font-size: 0.75em; margin-top: 5px; opacity: 0.7;">Sources: ${sourceLinks}</p>`;
+            }
+
+            messageDiv.innerHTML = `<div class="message-bubble">${content}</div>`;
+            chatHistoryEl.appendChild(messageDiv);
+            chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
+        }
+
+        async function appendTypingAnimation() {
+            const chatHistoryEl = document.getElementById("chatHistory");
+            const typingDiv = document.createElement("div");
+            typingDiv.className = "chat-message ai typing-indicator";
+            typingDiv.innerHTML = `<div class="message-bubble"><span class="typing-dots"></span></div>`;
+            chatHistoryEl.appendChild(typingDiv);
+            chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
+            return typingDiv;
+        }
+
+        async function askAgriGemini(userPrompt) {
+            const typingDiv = await appendTypingAnimation();
+            const prompt = `User's farming query: ${userPrompt}. Respond clearly, concisely, and provide actionable advice.`;
+
+            const payload = {
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                tools: [{ "google_search": {} }],
+                systemInstruction: {
+                    parts: [{ text: "You are Agri-Gemini, an expert agricultural advisor. Your response must be concise, accurate, and actionable for farmers. Use simple language and always cite sources when providing factual or recommendation-based answers, as if you are a friendly expert." }]
+                },
+                config: {
+                    temperature: 0.2
+                }
+            };
+
+            try {
+                const response = await fetchWithBackoff(CHAT_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                
+                let text = "Sorry, I couldn't fetch advice. Please try again. If this continues, the API service might be unavailable.";
+                let sources = [];
+
+                const candidate = result.candidates?.[0];
+
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    text = candidate.content.parts[0].text;
+                    const groundingMetadata = candidate.groundingMetadata;
+                    if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                        sources = groundingMetadata.groundingAttributions
+                            .map(attribution => ({
+                                uri: attribution.web?.uri,
+                                title: attribution.web?.title,
+                            }))
+                            .filter(source => source.uri && source.title);
+                    }
+                }
+
+                typingDiv.remove();
+                appendMessage("ai", text, sources);
+
+            } catch (error) {
+                console.error("Gemini Chat Error:", error);
+                typingDiv.remove();
+                appendMessage("ai", "An error occurred while connecting to the advisor. Please check your network or try again shortly.", []);
+            }
+        }
+        
+
+        // JAVASCRIPT LOGIC should be d
+        document.addEventListener("DOMContentLoaded", function () {
+            
+            
+            function varCSS(name) {
+                return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+            }
+            const toast = document.getElementById('toast-message');
+
+            function showToast(message, isSuccess = true) {
+                toast.textContent = message;
+                toast.style.backgroundColor = isSuccess ? varCSS('--color-primary') : '#d32f2f';
+                toast.classList.add('show');
+                
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                }, 3500);
+            }
+
+            /* ===================================================== */
+            /* AUTH / LOGIN SYSTEM — Farmer vs Buyer                 */
+            /* ===================================================== */
+            const AUTH_STORAGE_KEY = 'agriUserProfile';
+            const PRODUCTS_STORAGE_KEY = 'agriProductListings';
+            const NOTIF_STORAGE_KEY = 'agriFarmerNotifications';
+            // Declared early so functions that read it (e.g. renderNotifications, called from
+            // initAuth on page load) never run before it's initialized.
+            let currentLang = 'en';
+
+            const loginOverlay = document.getElementById('loginOverlay');
+            const roleSelectStep = document.getElementById('roleSelectStep');
+            const farmerLoginForm = document.getElementById('farmerLoginForm');
+            const buyerLoginForm = document.getElementById('buyerLoginForm');
+
+            const chooseFarmerBtn = document.getElementById('chooseFarmerBtn');
+            const chooseBuyerBtn = document.getElementById('chooseBuyerBtn');
+            const backFromFarmerBtn = document.getElementById('backFromFarmerBtn');
+            const backFromBuyerBtn = document.getElementById('backFromBuyerBtn');
+
+            const farmerNameInput = document.getElementById('farmerName');
+            const farmerPlaceInput = document.getElementById('farmerPlace');
+            const farmerPhotoInput = document.getElementById('farmerPhotoInput');
+            const farmerPhotoPreview = document.getElementById('farmerPhotoPreview');
+
+            const buyerNameInput = document.getElementById('buyerName');
+            const buyerAddressInput = document.getElementById('buyerAddress');
+
+            const profileAvatar = document.getElementById('profileAvatar');
+            const profileNameEl = document.getElementById('profileName');
+            const profileRoleEl = document.getElementById('profileRole');
+            const logoutBtn = document.getElementById('logoutBtn');
+            const welcomeBannerEl = document.getElementById('welcome-banner');
+
+            let farmerPhotoDataUrl = '';
+            let currentUser = null;
+            let pendingGoogleRole = null;
+            let farmerGoogleEmail = '';
+            let buyerGoogleEmail = '';
+
+            function showLoginStep(stepEl) {
+                [roleSelectStep, farmerLoginForm, buyerLoginForm].forEach(s => {
+                    s.style.display = 'none';
+                });
+                stepEl.style.display = (stepEl.tagName === 'FORM') ? 'flex' : 'block';
+                if (stepEl.tagName === 'FORM') {
+                    stepEl.style.flexDirection = 'column';
+                }
+            }
+
+            chooseFarmerBtn.addEventListener('click', () => { pendingGoogleRole = 'farmer'; showLoginStep(farmerLoginForm); });
+            chooseBuyerBtn.addEventListener('click', () => { pendingGoogleRole = 'buyer'; showLoginStep(buyerLoginForm); });
+            backFromFarmerBtn.addEventListener('click', () => { pendingGoogleRole = null; showLoginStep(roleSelectStep); });
+            backFromBuyerBtn.addEventListener('click', () => { pendingGoogleRole = null; showLoginStep(roleSelectStep); });
+
+            farmerPhotoInput.addEventListener('change', () => {
+                const file = farmerPhotoInput.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    farmerPhotoDataUrl = e.target.result;
+                    farmerPhotoPreview.src = farmerPhotoDataUrl;
+                    farmerPhotoPreview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            });
+
+            function applyRoleVisibility(role) {
+                document.body.classList.remove('role-farmer', 'role-buyer');
+                document.body.classList.add(role === 'farmer' ? 'role-farmer' : 'role-buyer');
+            }
+
+            function initials(name) {
+                return (name || '').trim().split(/\s+/).slice(0, 2).map(w => w[0] ? w[0].toUpperCase() : '').join('');
+            }
+
+            function updateWelcomeAndProfile(user) {
+                if (user.role === 'farmer') {
+                    welcomeBannerEl.innerHTML = `Welcome Farmer ${user.name} <i class="fa-solid fa-seedling"></i>`;
+                    profileRoleEl.textContent = 'Farmer' + (user.place ? ' · ' + user.place : '');
+                } else {
+                    welcomeBannerEl.innerHTML = `Welcome ${user.name} <i class="fa-solid fa-basket-shopping"></i>`;
+                    profileRoleEl.textContent = 'Buyer';
+                }
+                profileNameEl.textContent = user.name;
+
+                if (user.role === 'farmer' && user.profilePic) {
+                    profileAvatar.style.backgroundImage = `url(${user.profilePic})`;
+                    profileAvatar.textContent = '';
+                } else {
+                    profileAvatar.style.backgroundImage = '';
+                    profileAvatar.textContent = initials(user.name) || '?';
+                }
+            }
+
+            function completeLogin(user) {
+                currentUser = user;
+                localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+                document.body.classList.add('logged-in');
+                document.body.style.overflow = '';
+                applyRoleVisibility(user.role);
+                updateWelcomeAndProfile(user);
+                renderProductListings();
+                renderNotifications();
+                showToast(`Welcome ${user.name}! You're logged in as a ${user.role}.`, true);
+            }
+
+            farmerLoginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const name = farmerNameInput.value.trim();
+                const place = farmerPlaceInput.value.trim();
+                if (!name || !place) {
+                    showToast('Please enter your name and place to continue.', false);
+                    return;
+                }
+                completeLogin({ role: 'farmer', name, place, profilePic: farmerPhotoDataUrl, email: farmerGoogleEmail });
+            });
+
+            buyerLoginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const name = buyerNameInput.value.trim();
+                const address = buyerAddressInput.value.trim();
+                if (!name || !address) {
+                    showToast('Please enter your name and address to continue.', false);
+                    return;
+                }
+                completeLogin({ role: 'buyer', name, address, email: buyerGoogleEmail });
+            });
+
+            function resetLoginForm() {
+                showLoginStep(roleSelectStep);
+                farmerLoginForm.reset();
+                buyerLoginForm.reset();
+                farmerPhotoDataUrl = '';
+                farmerPhotoPreview.style.display = 'none';
+                farmerPhotoPreview.src = '';
+                farmerGoogleEmail = '';
+                buyerGoogleEmail = '';
+                pendingGoogleRole = null;
+            }
+
+            logoutBtn.addEventListener('click', () => {
+                localStorage.removeItem(AUTH_STORAGE_KEY);
+                currentUser = null;
+                farmerGoogleEmail = '';
+                buyerGoogleEmail = '';
+                document.body.classList.remove('logged-in', 'role-farmer', 'role-buyer');
+                document.body.style.overflow = 'hidden';
+                resetLoginForm();
+                showToast('You have been logged out.', true);
+            });
+
+            function initAuth() {
+                const saved = localStorage.getItem(AUTH_STORAGE_KEY);
+                if (saved) {
+                    try {
+                        const user = JSON.parse(saved);
+                        if (user && user.role && user.name) {
+                            currentUser = user;
+                            document.body.classList.add('logged-in');
+                            document.body.style.overflow = '';
+                            applyRoleVisibility(user.role);
+                            updateWelcomeAndProfile(user);
+                            renderProductListings();
+                            renderNotifications();
+                            return;
+                        }
+                    } catch (e) {
+                        console.error('Could not parse saved profile', e);
+                    }
+                }
+                // Not logged in yet — keep the login overlay up and lock background scroll
+                document.body.style.overflow = 'hidden';
+            }
+
+            initAuth();
+            /* ================= END AUTH / LOGIN SYSTEM ================= */
+
+            /* ===================================================== */
+            /* GOOGLE SIGN-IN — "Continue with Google" on login forms */
+            /* ===================================================== */
+            const googleBtnFarmer = document.getElementById('googleBtnFarmer');
+            const googleBtnBuyer = document.getElementById('googleBtnBuyer');
+
+            function decodeGoogleCredential(credential) {
+                const base64Payload = credential.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+                const jsonPayload = decodeURIComponent(
+                    atob(base64Payload).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
+                );
+                return JSON.parse(jsonPayload);
+            }
+
+            function handleGoogleCredentialResponse(response) {
+                let profile;
+                try {
+                    profile = decodeGoogleCredential(response.credential);
+                } catch (err) {
+                    console.error('Google sign-in: could not read credential', err);
+                    showToast('Could not read your Google profile. Please try again or enter your details manually.', false);
+                    return;
+                }
+
+                const { name, email, picture } = profile;
+
+                if (pendingGoogleRole === 'farmer') {
+                    farmerNameInput.value = name || '';
+                    farmerGoogleEmail = email || '';
+                    if (picture) {
+                        farmerPhotoDataUrl = picture;
+                        farmerPhotoPreview.src = picture;
+                        farmerPhotoPreview.style.display = 'block';
+                    }
+                    showToast(`Signed in as ${name} with Google. Add your village to finish.`, true);
+                    farmerPlaceInput.focus();
+                } else if (pendingGoogleRole === 'buyer') {
+                    buyerNameInput.value = name || '';
+                    buyerGoogleEmail = email || '';
+                    showToast(`Signed in as ${name} with Google. Add your address to finish.`, true);
+                    buyerAddressInput.focus();
+                }
+            }
+            window.handleGoogleCredentialResponse = handleGoogleCredentialResponse;
+
+            function initGoogleSignIn(attemptsLeft = 20) {
+                if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID.indexOf('YOUR_GOOGLE_CLIENT_ID') !== -1) {
+                    // No real Client ID configured yet — leave the slots empty.
+                    // (CSS hides the "or continue with Google" divider automatically.)
+                    return;
+                }
+                if (typeof google === 'undefined' || !google.accounts || !google.accounts.id) {
+                    if (attemptsLeft > 0) {
+                        setTimeout(() => initGoogleSignIn(attemptsLeft - 1), 300);
+                    } else {
+                        console.warn('Google Identity Services script did not load — check network access.');
+                    }
+                    return;
+                }
+
+                google.accounts.id.initialize({
+                    client_id: GOOGLE_CLIENT_ID,
+                    callback: handleGoogleCredentialResponse
+                });
+
+                if (googleBtnFarmer) {
+                    google.accounts.id.renderButton(googleBtnFarmer, { theme: 'outline', size: 'large', width: 280, text: 'continue_with' });
+                }
+                if (googleBtnBuyer) {
+                    google.accounts.id.renderButton(googleBtnBuyer, { theme: 'outline', size: 'large', width: 280, text: 'continue_with' });
+                }
+            }
+
+            initGoogleSignIn();
+            /* ================= END GOOGLE SIGN-IN ================= */
+
+            /* ===================================================== */
+            /* PRODUCT LISTINGS — Farmer lists, Buyer browses/buys   */
+            /* ===================================================== */
+            function loadProductListings() {
+                try {
+                    return JSON.parse(localStorage.getItem(PRODUCTS_STORAGE_KEY)) || [];
+                } catch (e) {
+                    return [];
+                }
+            }
+
+            function saveProductListings(products) {
+                localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
+            }
+
+            function addProductListing(name, qty, price, imageDataUrl) {
+                if (!currentUser || currentUser.role !== 'farmer') return;
+                if (!name || isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
+                    showToast(translations[currentLang]['toast-error-fields'], false);
+                    return;
+                }
+                if (!imageDataUrl) {
+                    showToast(translations[currentLang]['toast-error-image'], false);
+                    return;
+                }
+                const products = loadProductListings();
+                products.push({
+                    id: Date.now() + Math.random().toString(16).slice(2),
+                    name,
+                    qty: parseInt(qty),
+                    price: parseFloat(price),
+                    farmerName: currentUser.name,
+                    farmerPlace: currentUser.place || '',
+                    image: imageDataUrl
+                });
+                saveProductListings(products);
+                renderProductListings();
+                showToast(`${name} has been listed for sale!`, true);
+            }
+
+            window.removeProductListing = function (id) {
+                const products = loadProductListings().filter(p => p.id !== id);
+                saveProductListings(products);
+                renderProductListings();
+                showToast('Listing removed.', true);
+            };
+
+            window.buyProductListing = function (id) {
+                const products = loadProductListings();
+                const product = products.find(p => p.id === id);
+                if (!product || product.qty <= 0) return;
+
+                const qtyInput = document.getElementById(`buyQty-${id}`);
+                let requestedQty = qtyInput ? parseInt(qtyInput.value) : 1;
+                if (isNaN(requestedQty) || requestedQty <= 0) requestedQty = 1;
+
+                if (requestedQty > product.qty) {
+                    showToast(translations[currentLang]['toast-sold-out'](product.qty, product.name), false);
+                    return;
+                }
+
+                // Reduce the remaining stock by the quantity bought
+                product.qty -= requestedQty;
+                saveProductListings(products);
+                renderProductListings();
+
+                const buyerName = (currentUser && currentUser.name) ? currentUser.name : 'A buyer';
+                const unitWordEn = requestedQty > 1 ? 'units' : 'unit';
+                addFarmerNotification(
+                    product.farmerName,
+                    `${buyerName} bought ${requestedQty} ${unitWordEn} of your ${product.name}.`,
+                    `${buyerName} ने आपके ${product.name} की ${requestedQty} इकाइयाँ खरीदीं।`
+                );
+
+                addToCart(product.name, requestedQty, product.price, product.id);
+            };
+
+            function renderProductListings() {
+                if (!currentUser) return;
+                const products = loadProductListings();
+
+                const myListingsItems = document.getElementById('myListingsItems');
+                if (myListingsItems) {
+                    const mine = products.filter(p => p.farmerName === currentUser.name);
+                    if (mine.length === 0) {
+                        myListingsItems.innerHTML = `<p>You haven't listed any products yet.</p>`;
+                    } else {
+                        myListingsItems.innerHTML = mine.map(p => `
+                            <div class="listing-item">
+                                <div class="listing-item-content">
+                                    ${p.image ? `<img src="${p.image}" alt="${p.name}" class="listing-item-thumb">` : ''}
+                                    <span><strong>${p.name}</strong> — ${p.qty > 0 ? `${p.qty} units left` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}</span>
+                                </div>
+                                <button class="remove-btn" onclick="removeProductListing('${p.id}')"><i class="fas fa-trash-alt"></i> Remove</button>
+                            </div>
+                        `).join('');
+                    }
+                }
+
+                const availableProductsItems = document.getElementById('availableProductsItems');
+                if (availableProductsItems) {
+                    if (products.length === 0) {
+                        availableProductsItems.innerHTML = `<p>No products listed yet. Check back soon!</p>`;
+                    } else {
+                        availableProductsItems.innerHTML = products.map(p => `
+                            <div class="listing-item">
+                                <div class="listing-item-content">
+                                    ${p.image ? `<img src="${p.image}" alt="${p.name}" class="listing-item-thumb">` : ''}
+                                    <span><strong>${p.name}</strong> — ${p.qty > 0 ? `${p.qty} units available` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}<br>
+                                    <small>Sold by ${p.farmerName}${p.farmerPlace ? ', ' + p.farmerPlace : ''}</small></span>
+                                </div>
+                                ${p.qty > 0 ? `
+                                <div class="buy-controls" style="display:flex;align-items:center;gap:8px;">
+                                    <input type="number" id="buyQty-${p.id}" min="1" max="${p.qty}" value="1" aria-label="Quantity to buy" style="width:60px;padding:6px;border-radius:4px;border:1px solid var(--color-card-border); background: var(--color-card-bg); color: var(--color-text);">
+                                    <button onclick="buyProductListing('${p.id}')"><i class="fas fa-cart-plus"></i> Add to Cart</button>
+                                </div>` : ''}
+                            </div>
+                        `).join('');
+                    }
+                }
+            }
+            /* ================= END PRODUCT LISTINGS ================= */
+
+            /* ===================================================== */
+            /* FARMER NOTIFICATIONS — alert when a buyer buys         */
+            /* ===================================================== */
+            const notifBellContainer = document.getElementById('notifBellContainer');
+            const notifBellBtn = document.getElementById('notifBellBtn');
+            const notifBadge = document.getElementById('notifBadge');
+            const notifDropdown = document.getElementById('notifDropdown');
+
+            function loadNotifications() {
+                try {
+                    return JSON.parse(localStorage.getItem(NOTIF_STORAGE_KEY)) || {};
+                } catch (e) {
+                    return {};
+                }
+            }
+
+            function saveNotifications(data) {
+                localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(data));
+            }
+
+            function addFarmerNotification(farmerName, textEn, textHi) {
+                const all = loadNotifications();
+                if (!all[farmerName]) all[farmerName] = [];
+                all[farmerName].unshift({
+                    id: Date.now() + Math.random().toString(16).slice(2),
+                    en: textEn,
+                    hi: textHi,
+                    time: Date.now(),
+                    read: false
+                });
+                saveNotifications(all);
+                if (currentUser && currentUser.role === 'farmer' && currentUser.name === farmerName) {
+                    renderNotifications();
+                }
+            }
+
+            function timeAgo(ts) {
+                const diff = Math.floor((Date.now() - ts) / 1000);
+                const isHi = currentLang === 'hi';
+                if (diff < 60) return isHi ? 'अभी' : 'just now';
+                if (diff < 3600) { const m = Math.floor(diff / 60); return isHi ? `${m} मिनट पहले` : `${m} min ago`; }
+                if (diff < 86400) { const h = Math.floor(diff / 3600); return isHi ? `${h} घंटे पहले` : `${h} hr ago`; }
+                const d = Math.floor(diff / 86400);
+                return isHi ? `${d} दिन पहले` : `${d} day(s) ago`;
+            }
+
+            function renderNotifications() {
+                if (!notifBellContainer) return;
+                if (!currentUser || currentUser.role !== 'farmer') {
+                    notifBadge.style.display = 'none';
+                    return;
+                }
+                const all = loadNotifications();
+                const mine = all[currentUser.name] || [];
+                const unreadCount = mine.filter(n => !n.read).length;
+
+                notifBadge.textContent = unreadCount > 9 ? '9+' : unreadCount;
+                notifBadge.style.display = unreadCount > 0 ? 'flex' : 'none';
+
+                if (mine.length === 0) {
+                    notifDropdown.innerHTML = `<p class="notif-empty">${currentLang === 'hi' ? 'अभी तक कोई सूचना नहीं।' : 'No notifications yet.'}</p>`;
+                } else {
+                    notifDropdown.innerHTML = mine.map(n => `
+                        <div class="notif-item ${n.read ? '' : 'unread'}">
+                            ${currentLang === 'hi' ? n.hi : n.en}
+                            <span class="notif-time">${timeAgo(n.time)}</span>
+                        </div>
+                    `).join('');
+                }
+            }
+
+            function markFarmerNotificationsRead() {
+                if (!currentUser || currentUser.role !== 'farmer') return;
+                const all = loadNotifications();
+                const mine = all[currentUser.name] || [];
+                if (mine.length === 0) return;
+                mine.forEach(n => n.read = true);
+                all[currentUser.name] = mine;
+                saveNotifications(all);
+            }
+
+            if (notifBellBtn) {
+                notifBellBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const opening = !notifDropdown.classList.contains('open');
+                    notifDropdown.classList.toggle('open');
+                    if (opening) {
+                        renderNotifications();
+                        setTimeout(() => {
+                            markFarmerNotificationsRead();
+                            renderNotifications();
+                        }, 1500);
+                    }
+                });
+                document.addEventListener('click', (e) => {
+                    if (!notifBellContainer.contains(e.target)) {
+                        notifDropdown.classList.remove('open');
+                    }
+                });
+            }
+            /* ================= END FARMER NOTIFICATIONS ================= */
+
+
+            let cart = []; 
+
+            function displayCart() {
+                const cartContainer = document.getElementById("cartItems");
+                cartContainer.innerHTML = "";
+                if (cart.length === 0) {
+                    cartContainer.innerHTML = `<p data-key="cart-empty">${translations[currentLang]['cart-empty']}</p>`;
+                    return;
+                }
+
+                let total = 0;
+                let html = '';
+                cart.forEach((item, index) => {
+                    const subtotal = item.qty * item.price;
+                    total += subtotal;
+                    html += `
+                        <div style="padding:10px;margin:5px 0;display:flex;justify-content:space-between;align-items:center;">
+                            <span>
+                                <strong>${item.name}</strong> — ${item.qty} units × ₹${item.price.toFixed(2)} = ₹${subtotal.toFixed(2)}
+                            </span>
+                            <button onclick="removeItem(${index})" style="background:#d32f2f !important; color:white; border:none; border-radius:4px; padding:5px 10px;"><i class="fas fa-trash-alt"></i></button>
+                        </div>
+                    `;
+                });
+                cartContainer.innerHTML = html;
+                cartContainer.innerHTML += `
+                    <h3 style="margin-top:20px; border-top: 1px solid var(--color-card-border); padding-top: 10px;">Total: ₹${total.toFixed(2)}</h3>
+                    <button onclick="makePayment(${total.toFixed(2)})" style="background:var(--color-primary);color:white;padding:10px 15px;border:none;border-radius:6px;cursor:pointer;font-weight:600;">Proceed to Pay</button>
+                `;
+            }
+
+            function addToCart(name, qty, price, productId = null) {
+                if (!name || isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
+                    showToast(translations[currentLang]['toast-error-fields'], false);
+                    return;
+                }
+                cart.push({ name, qty: parseInt(qty), price: parseFloat(price), productId });
+                showToast(translations[currentLang]['alert-cart-add'](name), true);
+                displayCart();
+            }
+            window.removeItem = function (index) {
+                const item = cart[index];
+                // Give the stock back to the listing if this item came from a real product listing
+                if (item && item.productId) {
+                    const products = loadProductListings();
+                    const product = products.find(p => p.id === item.productId);
+                    if (product) {
+                        product.qty += item.qty;
+                        saveProductListings(products);
+                        renderProductListings();
+                    }
+                }
+                cart.splice(index, 1);
+                displayCart();
+            }
+
+            window.makePayment = function (amount) {
+                if (amount <= 0 || cart.length === 0) {
+                    showToast(translations[currentLang]['alert-empty-cart'], false);
+                    return;
+                }
+
+                // Simulate payment processing
+                showToast(translations[currentLang]['alert-pay-processing'](amount), true);
+                
+                setTimeout(() => {
+                    showToast(translations[currentLang]['alert-pay-success'](amount), true);
+                    cart = [];
+                    displayCart();
+                }, 1500); 
+            }
+
+
+            const themeToggle = document.getElementById('themeToggle');
+            const body = document.body;
+            const savedTheme = localStorage.getItem('theme');
+            
+            if (savedTheme === 'dark') {
+                body.classList.add('dark-mode');
+                themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
+            } else {
+                themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
+            }
+
+            themeToggle.addEventListener('click', () => {
+                body.classList.toggle('dark-mode');
+                if (body.classList.contains('dark-mode')) {
+                    localStorage.setItem('theme', 'dark');
+                    themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
+                } else {
+                    localStorage.setItem('theme', 'light');
+                    themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
+                }
+            });
+
+            const personalCountKey = "personalVisitCount";
+            const personalCountEl = document.getElementById("visitorCount");
+            const personalTextEl = document.getElementById("personalVisitorText");
+            const globalTextEl = document.getElementById("globalVisitorText");
+
+            function updatePersonalVisitCounter() {
+                let currentCount = parseInt(localStorage.getItem(personalCountKey) || 0);
+                const newCount = currentCount + 1;
+                localStorage.setItem(personalCountKey, newCount);
+
+                let display = currentCount;
+                const step = 1; 
+                
+                const counterAnim = setInterval(() => {
+                    if (display < newCount) {
+                        display += step;
+                        if (display > newCount) display = newCount;
+                        personalCountEl.textContent = display.toLocaleString();
+                    } else {
+                        clearInterval(counterAnim);
+                        // Apply and remove glow effect
+                        personalCountEl.classList.add('highlight');
+                        setTimeout(() => {
+                            personalCountEl.classList.remove('highlight');
+                        }, 1500);
+                    }
+                }, 50);
+                
+                personalTextEl.textContent = `👥 You have visited this site `;
+                globalTextEl.textContent = `(Global count: ${localStorage.getItem("visitorCount") || 1})`; 
+
+            }
+            updatePersonalVisitCounter();
+
+
+            
+            const container = document.querySelector('.container');
+            const sections = document.querySelectorAll('section');
+            const navLinks = document.querySelectorAll('.nav-link');
+            let activeSectionID = 'marketplace';
+
+            
+            sections.forEach((sec, i) => {
+                 if (sec.id !== activeSectionID) {
+                    sec.classList.remove('active-panel');
+                    sec.style.transform = 'translateX(100%)';
+                    sec.style.opacity = '0';
+                 }
+            });
+
+            navLinks.forEach((link) => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (window.audioPlayer && !window.audioPlayer.paused) {
+                        window.audioPlayer.pause();
+                        window.audioPlayer.currentTime = 0;
+                        document.querySelectorAll('.tts-button').forEach(btn => {
+                            btn.innerHTML = '<i class="fas fa-volume-up"></i>';
+                            btn.style.boxShadow = 'none';
+                        });
+                    }
+                    
+                    const targetID = link.getAttribute('data-target');
+                    if (targetID === activeSectionID) return;
+
+                    const current = document.getElementById(activeSectionID);
+                    const next = document.getElementById(targetID);
+                    
+                    const currentIndex = Array.from(sections).findIndex(s => s.id === activeSectionID);
+                    const nextIndex = Array.from(sections).findIndex(s => s.id === targetID);
+
+                    // 1. Hide Current
+                    if (nextIndex > currentIndex) {
+                        current.style.transform = 'translateX(-100%)'; // Slide left out
+                    } else {
+                        current.style.transform = 'translateX(100%)'; // Slide right out
+                    }
+                    current.classList.remove('active-panel');
+
+                
+                    if (nextIndex > currentIndex) {
+                        next.style.transform = 'translateX(100%)';
+                    } else {
+                        next.style.transform = 'translateX(-100%)';
+                    }
+                    next.style.opacity = '1';
+                    
+                    
+                    setTimeout(() => {
+                        next.style.transform = 'translateX(0)';
+                        next.classList.add('active-panel');
+                    }, 50); 
+                    
+                    activeSectionID = targetID;
+
+                    // Updateting Navbar 
+                    navLinks.forEach(l => l.classList.remove('active'));
+                    link.classList.add('active');
+                });
+            });
+
+
+            // Text-to-Speech            
+            const audioEl = document.getElementById('ttsAudio');
+            window.audioPlayer = audioEl; 
+
+            function stopPlayback() {
+                if (!audioEl.paused) {
+                    audioEl.pause();
+                    audioEl.currentTime = 0;
+                }
+                document.querySelectorAll('.tts-button').forEach(btn => {
+                    btn.innerHTML = '<i class="fas fa-volume-up"></i>';
+                    btn.style.boxShadow = 'none';
+                    btn.classList.remove('speaking');
+                });
+                const listenBtn = document.getElementById('techniqueListenBtn');
+                if (listenBtn) {
+                    listenBtn.classList.remove('speaking');
+                    listenBtn.innerHTML = `<i class="fas fa-volume-up"></i> <span id="listenLabel" data-key="listen-label">${(translations[currentLang] && translations[currentLang]['listen-label']) || 'Listen'}</span>`;
+                }
+            }
+
+            const ttsButtons = document.querySelectorAll('.tts-button');
+            ttsButtons.forEach(button => {
+                button.addEventListener('click', async () => {
+                    const contentId = button.getAttribute('data-content-id');
+                    const sectionElement = document.getElementById(contentId);
+                    
+                    if (button.classList.contains('speaking')) {
+                        
+                        stopPlayback();
+                        return;
+                    } else if (!audioEl.paused) {
+                        
+                        stopPlayback();
+                    }
+
+                    
+                    let content = '';
+                    sectionElement.querySelectorAll('[data-key], p, h2, h3, h4, li').forEach(el => {
+                        // Exclude buttons and chat content
+                        if (!el.classList.contains('tts-button') && !el.classList.contains('tooltip-text') && !el.closest('#agriChatContainer')) {
+                            content += el.textContent.trim() + '. ';
+                        }
+                    });
+
+                    if (!content) return;
+
+                    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                    button.style.boxShadow = `0 0 10px var(--color-accent)`;
+                    button.classList.add('speaking');
+
+                    try {
+                        // --- Language selection for TTS ---
+                        const langCode = body.getAttribute('lang') === 'hi' ? 'hi-IN' : 'en-US';
+                        // Using different voices for immersion/variety
+                        const voiceName = langCode === 'hi-IN' ? 'Kore' : 'Zephyr'; 
+                        // --- End Language selection for TTS ---
+                        
+                        const TTS_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${API_KEY}`;
+                        const payload = {
+                            contents: [{
+                                parts: [{ text: content }]
+                            }],
+                            generationConfig: {
+                                responseModalities: ["AUDIO"],
+                                speechConfig: {
+                                    voiceConfig: {
+                                        prebuiltVoiceConfig: { voiceName: voiceName }
+                                    }
+                                }
+                            }
+                        };
+
+                        const response = await fetchWithBackoff(TTS_API_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        const result = await response.json();
+                        const part = result?.candidates?.[0]?.content?.parts?.[0];
+                        const audioData = part?.inlineData?.data;
+                        const mimeType = part?.inlineData?.mimeType;
+
+                        if (audioData && mimeType && mimeType.startsWith("audio/")) {
+                            const sampleRateMatch = mimeType.match(/rate=(\d+)/);
+                            const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 16000;
+                            const pcmData = base64ToArrayBuffer(audioData);
+                            const pcm16 = new Int16Array(pcmData);
+                            const wavBlob = pcmToWav(pcm16, sampleRate);
+                            
+                            if (audioEl.src) URL.revokeObjectURL(audioEl.src);
+                            
+                            const audioUrl = URL.createObjectURL(wavBlob);
+                            audioEl.src = audioUrl;
+                            audioEl.play();
+
+                            button.innerHTML = '<i class="fas fa-volume-off"></i>';
+                            
+                            audioEl.onended = () => {
+                                stopPlayback();
+                            };
+                        } else {
+                            showToast("TTS failed: Could not generate audio.", false);
+                            stopPlayback();
+                        }
+
+                    } catch (error) {
+                        console.error("TTS API Error:", error);
+                        showToast("TTS service unavailable. Please try later.", false);
+                        stopPlayback();
+                    }
+                });
+            });
+            const langToggle = document.getElementById('langToggle');
+            const translations = {
+                'en': {
+                    'header-title': 'AGRI DUNIYA',
+                    'header-tagline': 'Empowering Farmers with Digital Access to Markets, Knowledge & Government Schemes',
+                    'nav-market': 'Marketplace',
+                    'nav-learning': 'Learning Hub',
+                    'nav-videos': 'Videos',
+                    'nav-schemes': 'Schemes',
+                    'nav-contact': 'Contact',
+                    'sec-market-title': 'Digital Marketplace',
+                    'sec-market-p': 'Buy and Sell farm products directly. Farmers can list their crops, and buyers can purchase them directly ensuring fair trade.',
+                    'sell-title': 'Sell Your Products',
+                    'generate-title': 'Generate Product Listing ✨',
+                    'generate-button': 'Generate Description ✨',
+                    'listing-placeholder': 'Your professional product description will appear here.',
+                    'sell-button': 'Post for Sale',
+                    'sell-image-label': 'Add a Photo of the Vegetable (required) 📷',
+                    'cart-title': 'Your Cart',
+                    'cart-empty': 'Your cart is empty.',
+                    'sec-learning-title': 'Learning Hub',
+                    'sec-learning-p': 'Learn modern farming techniques, productivity improvement, and crop management through our platform.',
+                    'course-1-title': 'Modern Irrigation Techniques',
+                    'course-1-desc': 'Optimize water usage with drip and sprinkler systems. Learn smart water management.',
+                    'course-2-title': 'Organic Farming',
+                    'course-2-desc': 'Master the techniques of natural, chemical-free cultivation and soil enrichment.',
+                    'course-3-title': 'Crop Insurance Awareness',
+                    'course-3-desc': 'Understand policy details and claims process for securing your harvest against risks.',
+                    'course-4-title': 'Cloud Integration & e-Learning',
+                    'course-4-desc': 'Utilize cloud tools for data management and access to digital agricultural resources.',
+                    'ai-chat-title': '✨ Agri-Gemini: Instant Crop Advisor',
+                    'ai-desc': 'Ask me anything about farming techniques, market trends, or pest management!',
+                    'sec-video-title': 'Videos for Farmers',
+                    'sec-video-p': 'Watch these helpful videos on crop cultivation, soil health, and modern farming practices.',
+                    'sec-scheme-title': 'Government Schemes for Farmers',
+                    'sec-scheme-p': 'Here are some important government schemes designed to support farmers. Click on the links to learn more and apply:',
+                    'scheme-1-desc': 'Pradhan Mantri Kisan Samman Nidhi (PM-KISAN) – Direct income support of ₹6,000 annually to farmers.',
+                    'scheme-2-desc': 'Pradhan Mantri Fasal Bima Yojana (PMFBY) – Crop insurance for farmers against natural calamities.',
+                    'scheme-3-desc': 'Soil Health Card Scheme – Provides farmers with soil health reports and recommendations.',
+                    'scheme-4-desc': 'Agriculture Infrastructure Fund (AIF) – Financial support for developing agricultural infrastructure.',
+                    'scheme-5-desc': 'National Agriculture Market (eNAM) – Online trading platform for farmers to sell their produce.',
+                    'sec-contact-title': 'Contact Us',
+                    'contact-info-1': 'Email: support@farmerplatform.in',
+                    'contact-info-2': 'Helpline: +91 7393953233',
+                    'form-label-name': 'Name',
+                    'form-label-email': 'Email',
+                    'form-label-message': 'Message',
+                    'form-button-send': 'Send Message',
+                    'footer-copyright': '© 2025 Digital Marketplace & Learning Platform for Farmers | All Rights Reserved',
+                    'footer-visits': 'Total Visits: ',
+                    'toast-success': 'Message sent successfully! We will contact you soon.',
+                    'toast-error-fields': 'Please fill all marketplace fields correctly.',
+                    'toast-error-image': 'Please add a photo of the vegetable (from storage or camera) before selling.',
+                    'toast-error-search': 'Please enter a product name to search.',
+                    'toast-error-listing': 'Please enter a product name and some key points for the listing generator.',
+                    'alert-cart-add': (name) => `${name} added to cart!`,
+                    'alert-pay-success': (amount) => `Payment of ₹${amount} successful! Thank you for your purchase.`,
+                    'alert-pay-processing': (amount) => `Processing payment of ₹${amount}...`,
+                    'alert-search': (name) => `Searching for "${name}" in marketplace...`,
+                    'alert-empty-cart': 'Your cart is empty. Nothing to pay for.',
+                    'listen-label': 'Listen',
+                    'steps-label': '✍️ Steps to follow:',
+                    'toast-sold-out': (qty, name) => `Only ${qty} units of ${name} are available.`
+                },
+                'hi': {
+                    'header-title': 'एग्री दुनिया',
+                    'header-tagline': 'किसानों को बाज़ार, ज्ञान और सरकारी योजनाओं तक डिजिटल पहुँच के साथ सशक्त बनाना',
+                    'nav-market': 'बाज़ार',
+                    'nav-learning': 'सीखने का केंद्र',
+                    'nav-videos': 'वीडियो',
+                    'nav-schemes': 'योजनाएँ',
+                    'nav-contact': 'संपर्क',
+                    'sec-market-title': 'डिजिटल बाज़ार',
+                    'sec-market-p': 'कृषि उत्पादों को सीधे खरीदें और बेचें। किसान अपनी फसलें सूचीबद्ध कर सकते हैं, और खरीदार सीधे खरीद सकते हैं, जिससे उचित व्यापार सुनिश्चित होगा।',
+                    'sell-title': 'अपने उत्पाद बेचें',
+                    'generate-title': 'उत्पाद लिस्टिंग बनाएं ✨',
+                    'generate-button': 'विवरण बनाएं ✨',
+                    'listing-placeholder': 'आपका पेशेवर उत्पाद विवरण यहां दिखाई देगा।',
+                    'sell-button': 'बिक्री के लिए पोस्ट करें',
+                    'sell-image-label': 'सब्ज़ी की फोटो जोड़ें (आवश्यक) 📷',
+                    'cart-title': 'आपका कार्ट',
+                    'cart-empty': 'आपका कार्ट खाली है।',
+                    'sec-learning-title': 'सीखने का केंद्र',
+                    'sec-learning-p': 'हमारे मंच के माध्यम से आधुनिक खेती की तकनीकें, उत्पादकता में सुधार और फसल प्रबंधन सीखें।',
+                    'course-1-title': 'आधुनिक सिंचाई तकनीकें',
+                    'course-1-desc': 'ड्रिप और स्प्रिंकलर सिस्टम के साथ पानी के उपयोग को अनुकूलित करें। स्मार्ट जल प्रबंधन सीखें।',
+                    'course-2-title': 'जैविक खेती',
+                    'course-2-desc': 'प्राकृतिक, रसायन मुक्त खेती और मिट्टी संवर्धन की तकनीकों में महारत हासिल करें।',
+                    'course-3-title': 'फसल बीमा जागरूकता',
+                    'course-3-desc': 'जोखिमों के विरुद्ध अपनी फसल को सुरक्षित करने के लिए नीति विवरण और दावा प्रक्रिया को समझें।',
+                    'course-4-title': 'क्लाउड एकीकरण और ई-लर्निंग',
+                    'course-4-desc': 'डेटा प्रबंधन और डिजिटल कृषि संसाधनों तक पहुँच के लिए क्लाउड उपकरणों का उपयोग करें।',
+                    'ai-chat-title': '✨ एग्री-जेमिनी: तत्काल फसल सलाहकार',
+                    'ai-desc': 'खेती की तकनीकों, बाज़ार के रुझानों या कीट प्रबंधन के बारे में कुछ भी पूछें!',
+                    'sec-video-title': 'किसानों के लिए वीडियो',
+                    'sec-video-p': 'फसल की खेती, मिट्टी के स्वास्थ्य और आधुनिक कृषि पद्धतियों पर ये सहायक वीडियो देखें।',
+                    'sec-scheme-title': 'किसानों के लिए सरकारी योजनाएँ',
+                    'sec-scheme-p': 'यहां किसानों का समर्थन करने के लिए डिज़ाइन की गई कुछ महत्वपूर्ण सरकारी योजनाएँ दी गई हैं। अधिक जानने और आवेदन करने के लिए लिंक पर क्लिक करें:',
+                    'scheme-1-desc': 'प्रधान मंत्री किसान सम्मान निधि (पीएम-किसान) – किसानों को सालाना ₹6,000 का सीधा आय समर्थन।',
+                    'scheme-2-desc': 'प्रधान मंत्री फसल बीमा योजना (पीएमएफबीवाई) – प्राकृतिक आपदाओं के खिलाफ किसानों के लिए फसल बीमा।',
+                    'scheme-3-desc': 'मृदा स्वास्थ्य कार्ड योजना – किसानों को मिट्टी के स्वास्थ्य की रिपोर्ट और सिफारिशें प्रदान करती है।',
+                    'scheme-4-desc': 'कृषि अवसंरचना कोष (एआईएफ) – कृषि अवसंरचना के विकास के लिए वित्तीय सहायता।',
+                    'scheme-5-desc': 'राष्ट्रीय कृषि बाजार (ई-नाम) – किसानों को अपनी उपज बेचने के लिए ऑनलाइन ट्रेडिंग प्लेटफॉर्म।',
+                    'sec-contact-title': 'हमसे संपर्क करें',
+                    'contact-info-1': 'ईमेल: support@farmerplatform.in',
+                    'contact-info-2': 'हेल्पलाइन: +91 7393953233',
+                    'form-label-name': 'नाम',
+                    'form-label-email': 'ईमेल',
+                    'form-label-message': 'संदेश',
+                    'form-button-send': 'संदेश भेजें',
+                    'footer-copyright': '© 2025 डिजिटल बाज़ार और सीखने का मंच | सर्वाधिकार सुरक्षित',
+                    'footer-visits': 'कुल विज़िट: ',
+                    'toast-success': 'संदेश सफलतापूर्वक भेज दिया गया! हम जल्द ही आपसे संपर्क करेंगे।',
+                    'toast-error-fields': 'कृपया बाज़ार के सभी फ़ील्ड सही ढंग से भरें।',
+                    'toast-error-image': 'बिक्री से पहले कृपया सब्ज़ी की फोटो जोड़ें (स्टोरेज या कैमरे से)।',
+                    'toast-error-search': 'कृपया खोज के लिए उत्पाद का नाम दर्ज करें।',
+                    'toast-error-listing': 'कृपया लिस्टिंग जनरेटर के लिए उत्पाद का नाम और कुछ मुख्य बिंदु दर्ज करें।',
+                    'alert-cart-add': (name) => `${name} कार्ट में जोड़ा गया!`,
+                    'alert-pay-success': (amount) => `₹${amount} का भुगतान सफल रहा! आपकी खरीद के लिए धन्यवाद।`,
+                    'alert-pay-processing': (amount) => `₹${amount} का भुगतान संसाधित हो रहा है...`,
+                    'alert-empty-cart': 'आपका कार्ट खाली है। भुगतान करने के लिए कुछ भी नहीं है।',
+                    'listen-label': 'सुनें',
+                    'steps-label': '✍️ अपनाए जाने वाले कदम:',
+                    'toast-sold-out': (qty, name) => `${name} की केवल ${qty} इकाइयाँ उपलब्ध हैं।`
+                }
+            };
+
+            function applyTranslation(lang) {
+                currentLang = lang;
+                body.setAttribute('lang', lang);
+                langToggle.textContent = lang.toUpperCase() === 'EN' ? 'EN/HI' : 'HI/EN';
+
+                document.querySelectorAll('[data-key]').forEach(element => {
+                    const key = element.getAttribute('data-key');
+                    const text = translations[lang][key];
+                    if (text && typeof text === 'string') {
+                        element.textContent = text;
+                    }
+                });
+
+                
+                        displayCart(); 
+                        renderNotifications();
+
+                const initialChatText = lang === 'en' ? "Hello! I'm Agri-Gemini, your AI crop expert. Ask me anything about farming techniques, pests, or market advice." : "नमस्ते! मैं एग्री-जेमिनी, आपका एआई फसल विशेषज्ञ हूँ। मुझसे खेती की तकनीकों, कीटों या बाज़ार सलाह के बारे में कुछ भी पूछें।";
+                const initialChatBubble = document.querySelector('#chatHistory .chat-message.ai .message-bubble');
+                if (initialChatBubble) {
+                    initialChatBubble.textContent = initialChatText;
+                }
+
+                stopPlayback();
+            }
+
+            const savedLang = localStorage.getItem('language') || 'en';
+            applyTranslation(savedLang);
+
+            langToggle.addEventListener('click', () => {
+                const newLang = currentLang === 'en' ? 'hi' : 'en';
+                localStorage.setItem('language', newLang);
+                applyTranslation(newLang);
+                if (techniqueModal.classList.contains('visible')) {
+                    openTechniqueModal(techniqueModal.getAttribute('data-topic'));
+                }
+            });
+
+            /* ===================================================== */
+            /* EASY LEARNING GUIDE MODAL — "Tap to see easy guide"   */
+            /* ===================================================== */
+            const learningGuides = {
+                irrigation: {
+                    courseNum: 1,
+                    emoji: '💧',
+                    diagram: ['🚰', '⚙️', '💧', '🌱'],
+                    steps: [
+                        { icon: '👉', en: 'Check your soil before watering — dig down about 2 inches; only water if it feels dry.', hi: 'पानी देने से पहले मिट्टी जांचें — करीब 2 इंच खोदकर देखें; अगर सूखी लगे तभी पानी दें।' },
+                        { icon: '🚿', en: 'Install drip lines or micro-sprinklers along the crop rows instead of flooding the field.', hi: 'खेत में पानी भरने की जगह फसल की कतारों में ड्रिप लाइन या माइक्रो-स्प्रिंकलर लगाएं।' },
+                        { icon: '⏰', en: 'Water early morning or evening to reduce loss from evaporation.', hi: 'वाष्पीकरण से बचाव के लिए सुबह जल्दी या शाम को पानी दें।' },
+                        { icon: '🔧', en: 'Check pipes and drip emitters every week for leaks or blockages.', hi: 'हर हफ्ते पाइप और ड्रिप एमिटर में रिसाव या रुकावट की जांच करें।' },
+                        { icon: '📊', en: 'Keep a simple weekly note of water used to see how much you are saving.', hi: 'बचत देखने के लिए हर हफ्ते इस्तेमाल हुए पानी का हिसाब रखें।' }
+                    ],
+                    tip: { en: 'Drip irrigation can cut water use by 40–60% compared to flood irrigation, while also improving crop yield.', hi: 'खेत में पानी भरने की तुलना में ड्रिप सिंचाई से 40–60% तक पानी बचता है और फसल की पैदावार भी बढ़ती है।' }
+                },
+                organic: {
+                    courseNum: 2,
+                    emoji: '🌿',
+                    diagram: ['🍂', '🪱', '🌱', '🥦'],
+                    steps: [
+                        { icon: '🍂', en: 'Start a compost pit with crop waste, dry leaves, and cow dung — turn it every 2 weeks.', hi: 'फसल अवशेष, सूखी पत्तियों और गोबर से खाद का गड्ढा बनाएं — हर 2 हफ्ते में पलटें।' },
+                        { icon: '🪱', en: 'Use vermicompost or biofertilizers in place of chemical fertilizers.', hi: 'रासायनिक खाद की जगह वर्मीकम्पोस्ट या जैव-उर्वरक का उपयोग करें।' },
+                        { icon: '🌼', en: 'Rotate crops and try intercropping to keep the soil\'s nutrients balanced.', hi: 'मिट्टी के पोषक तत्व संतुलित रखने के लिए फसल चक्र और अंतर-फसल अपनाएं।' },
+                        { icon: '🐞', en: 'Control pests with neem oil spray or companion planting instead of chemical pesticides.', hi: 'रासायनिक कीटनाशक की जगह नीम के तेल का छिड़काव या साथी-रोपण अपनाएं।' },
+                        { icon: '📜', en: 'Once your field stays chemical-free for the required period, apply for organic certification to sell at better prices.', hi: 'खेत पूरी तरह रसायन-मुक्त होने के बाद बेहतर दाम पाने के लिए ऑर्गेनिक प्रमाणन के लिए आवेदन करें।' }
+                    ],
+                    tip: { en: 'Healthy, organic-rich soil holds more water and needs fewer inputs season after season.', hi: 'जैविक तत्वों से भरपूर स्वस्थ मिट्टी अधिक पानी रोकती है और हर मौसम में कम खाद-दवा की जरूरत पड़ती है।' }
+                },
+                insurance: {
+                    courseNum: 3,
+                    emoji: '🛡️',
+                    diagram: ['🌾', '⚠️', '🛡️', '💰'],
+                    steps: [
+                        { icon: '📝', en: 'Enroll in Pradhan Mantri Fasal Bima Yojana (PMFBY) before the cut-off date for your crop season.', hi: 'अपने फसल सीजन की अंतिम तिथि से पहले प्रधानमंत्री फसल बीमा योजना (PMFBY) में नामांकन करें।' },
+                        { icon: '🏦', en: 'You pay only a small share of the premium — the government covers the rest.', hi: 'आपको प्रीमियम का बहुत छोटा हिस्सा ही देना होता है — बाकी सरकार वहन करती है।' },
+                        { icon: '🌪️', en: 'If your crop is damaged by drought, flood, pests, or disease, report it to your bank or insurer within 72 hours.', hi: 'सूखा, बाढ़, कीट या रोग से फसल खराब होने पर 72 घंटे के अंदर बैंक या बीमा कंपनी को सूचित करें।' },
+                        { icon: '📸', en: 'Take clear photos of the damaged field as proof when you report the loss.', hi: 'नुकसान की सूचना देते समय खराब फसल की स्पष्ट तस्वीरें सबूत के तौर पर लें।' },
+                        { icon: '💵', en: 'After assessment, the claim amount is usually paid directly into your linked bank account.', hi: 'आकलन के बाद दावे की राशि आमतौर पर सीधे आपके जुड़े बैंक खाते में भेजी जाती है।' }
+                    ],
+                    tip: { en: 'Keep your Aadhaar, land records, and bank details updated — mismatched details are the most common reason claims get delayed.', hi: 'अपना आधार, भूमि रिकॉर्ड और बैंक विवरण अपडेट रखें — जानकारी न मिलने से ही ज़्यादातर दावों में देरी होती है।' }
+                },
+                cloud: {
+                    courseNum: 4,
+                    emoji: '☁️',
+                    diagram: ['📱', '☁️', '📊', '🎓'],
+                    steps: [
+                        { icon: '📱', en: 'Use a smartphone or your nearest CSC (Common Service Centre) to access government agri-portals and apps.', hi: 'सरकारी कृषि पोर्टल और ऐप तक पहुंचने के लिए स्मार्टफोन या नज़दीकी CSC (कॉमन सर्विस सेंटर) का उपयोग करें।' },
+                        { icon: '☁️', en: 'Save your soil health reports, insurance papers, and land records online so they are never lost.', hi: 'मिट्टी स्वास्थ्य रिपोर्ट, बीमा कागज़ात और भूमि रिकॉर्ड को ऑनलाइन सुरक्षित रखें ताकि वे कभी न खोएं।' },
+                        { icon: '📊', en: 'Check mandi (market) prices online before deciding when and where to sell your produce.', hi: 'उपज कब और कहां बेचनी है, यह तय करने से पहले मंडी के भाव ऑनलाइन जांच लें।' },
+                        { icon: '🎓', en: 'Watch free e-learning videos and webinars from agricultural universities (KVK) to learn new techniques.', hi: 'नई तकनीकें सीखने के लिए कृषि विश्वविद्यालयों (KVK) के मुफ्त ई-लर्निंग वीडियो और वेबिनार देखें।' },
+                        { icon: '🔔', en: 'Turn on SMS or app alerts for weather warnings and scheme deadlines.', hi: 'मौसम की चेतावनी और योजनाओं की अंतिम तिथि के लिए SMS या ऐप अलर्ट चालू करें।' }
+                    ],
+                    tip: { en: 'A free app like Kisan Suvidha or eNAM puts market prices and weather alerts right in your pocket.', hi: 'किसान सुविधा या ई-नाम जैसे मुफ्त ऐप से बाज़ार भाव और मौसम अलर्ट सीधे आपकी जेब में मिलते हैं।' }
+                }
+            };
+
+            const techniqueOverlay = document.getElementById('techniqueOverlay');
+            const techniqueModal = document.getElementById('techniqueModal');
+            const techniqueEmoji = document.getElementById('techniqueEmoji');
+            const techniqueModalTitle = document.getElementById('techniqueModalTitle');
+            const techniqueDiagram = document.getElementById('techniqueDiagram');
+            const techniqueSteps = document.getElementById('techniqueSteps');
+            const techniqueTip = document.getElementById('techniqueTip');
+            const techniqueListenBtn = document.getElementById('techniqueListenBtn');
+
+            function openTechniqueModal(topic) {
+                const guide = learningGuides[topic];
+                if (!guide) return;
+
+                techniqueEmoji.textContent = guide.emoji;
+                techniqueModalTitle.textContent = translations[currentLang][`course-${guide.courseNum}-title`];
+
+                techniqueDiagram.innerHTML = guide.diagram
+                    .map((node, i) => `<div class="diagram-node">${node}</div>` + (i < guide.diagram.length - 1 ? `<span class="diagram-arrow">→</span>` : ''))
+                    .join('');
+
+                techniqueSteps.innerHTML = guide.steps
+                    .map((step, i) => `
+                        <div class="technique-step">
+                            <span class="step-num">${i + 1}</span>
+                            <span class="step-icon">${step.icon}</span>
+                            <span>${step[currentLang]}</span>
+                        </div>
+                    `).join('');
+
+                techniqueTip.textContent = '💡 ' + guide.tip[currentLang];
+
+                techniqueModal.setAttribute('data-topic', topic);
+                techniqueOverlay.classList.add('visible');
+                techniqueModal.classList.add('visible');
+                document.body.style.overflow = 'hidden';
+            }
+
+            window.closeTechniqueModal = function () {
+                stopPlayback();
+                techniqueOverlay.classList.remove('visible');
+                techniqueModal.classList.remove('visible');
+                document.body.style.overflow = '';
+            };
+
+            document.querySelectorAll('.learning-card').forEach(card => {
+                card.addEventListener('click', () => openTechniqueModal(card.getAttribute('data-topic')));
+                card.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openTechniqueModal(card.getAttribute('data-topic'));
+                    }
+                });
+            });
+
+            techniqueListenBtn.addEventListener('click', async () => {
+                if (techniqueListenBtn.classList.contains('speaking')) {
+                    stopPlayback();
+                    return;
+                } else if (!audioEl.paused) {
+                    stopPlayback();
+                }
+
+                let content = '';
+                techniqueModal.querySelectorAll('h3, .technique-step, .technique-tip').forEach(el => {
+                    content += el.textContent.trim() + '. ';
+                });
+                if (!content) return;
+
+                techniqueListenBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                techniqueListenBtn.classList.add('speaking');
+
+                try {
+                    const langCode = body.getAttribute('lang') === 'hi' ? 'hi-IN' : 'en-US';
+                    const voiceName = langCode === 'hi-IN' ? 'Kore' : 'Zephyr';
+
+                    const TTS_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${API_KEY}`;
+                    const payload = {
+                        contents: [{ parts: [{ text: content }] }],
+                        generationConfig: {
+                            responseModalities: ["AUDIO"],
+                            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceName } } }
+                        }
+                    };
+
+                    const response = await fetchWithBackoff(TTS_API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+                    const part = result?.candidates?.[0]?.content?.parts?.[0];
+                    const audioData = part?.inlineData?.data;
+                    const mimeType = part?.inlineData?.mimeType;
+
+                    if (audioData && mimeType && mimeType.startsWith("audio/")) {
+                        const sampleRateMatch = mimeType.match(/rate=(\d+)/);
+                        const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 16000;
+                        const pcmData = base64ToArrayBuffer(audioData);
+                        const pcm16 = new Int16Array(pcmData);
+                        const wavBlob = pcmToWav(pcm16, sampleRate);
+
+                        if (audioEl.src) URL.revokeObjectURL(audioEl.src);
+
+                        audioEl.src = URL.createObjectURL(wavBlob);
+                        audioEl.play();
+
+                        techniqueListenBtn.innerHTML = '<i class="fas fa-volume-off"></i>';
+
+                        audioEl.onended = () => {
+                            stopPlayback();
+                        };
+                    } else {
+                        showToast("TTS failed: Could not generate audio.", false);
+                        stopPlayback();
+                    }
+                } catch (error) {
+                    console.error("TTS API Error:", error);
+                    showToast("TTS service unavailable. Please try later.", false);
+                    stopPlayback();
+                }
+            });
+            /* ================= END EASY LEARNING GUIDE MODAL ================= */
+
+            const contactForm = document.getElementById('contactForm');
+
+            
+            contactForm.addEventListener('submit', function (e) {
+                e.preventDefault();
+                
+                console.log('Form Data Submitted:', {
+                    name: document.getElementById('contactName').value,
+                    email: document.getElementById('contactEmail').value,
+                    message: document.getElementById('contactMessage').value
+                });
+
+                showToast(translations[currentLang]['toast-success'], true);
+
+                contactForm.reset();
+            });
+            const sellButton = document.getElementById('postForSaleBtn');
+            const generateListingBtn = document.getElementById('generateListingBtn');
+
+            const sellImageInput = document.getElementById('sellImage');
+            const sellImagePreview = document.getElementById('sellImagePreview');
+            let sellImageDataUrl = '';
+
+            sellImageInput.addEventListener('change', () => {
+                const file = sellImageInput.files[0];
+                if (!file) {
+                    sellImageDataUrl = '';
+                    sellImagePreview.style.display = 'none';
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    sellImageDataUrl = e.target.result;
+                    sellImagePreview.src = sellImageDataUrl;
+                    sellImagePreview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            });
+
+            sellButton.addEventListener('click', function () {
+                const name = document.getElementById('sellName').value.trim();
+                const qty = document.getElementById('sellQty').value;
+                const price = document.getElementById('sellPrice').value;
+                if (!sellImageDataUrl) {
+                    showToast(translations[currentLang]['toast-error-image'], false);
+                    return;
+                }
+                addProductListing(name, qty, price, sellImageDataUrl);
+                document.getElementById('sellName').value = "";
+                document.getElementById('sellQty').value = "";
+                document.getElementById('sellPrice').value = "";
+                sellImageInput.value = "";
+                sellImageDataUrl = '';
+                sellImagePreview.style.display = 'none';
+                sellImagePreview.src = '';
+            });
+
+            async function generateProductDescription(productName, keyPoints) {
+                const outputEl = document.getElementById('listingOutput');
+                outputEl.innerHTML = `<p style="color: var(--color-primary);"><i class="fas fa-spinner fa-spin"></i> Generating...</p>`;
+                
+                const userPrompt = `Generate a compelling and professional online marketplace description for the following product. Keep it concise (max 3 sentences) but highly attractive to buyers.
+                Product Name: ${productName}
+                Key Selling Points: ${keyPoints}`;
+
+                const payload = {
+                    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+                    // No Google Search grounding needed for creative generation
+                    systemInstruction: {
+                        parts: [{ text: "You are an expert agricultural copywriter for an online farmer's marketplace. You write attractive, trustworthy, and concise product listings in an informative but engaging tone." }]
+                    },
+                    config: {
+                        temperature: 0.7 // Higher temperature for more creative output
+                    }
+                };
+
+                try {
+                    const response = await fetchWithBackoff(CHAT_API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await response.json();
+                    
+                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "❌ Failed to generate description. Check your network or try again.";
+                    
+                    outputEl.innerHTML = `<div class="message-bubble ai" style="display: block; border-radius: 6px; background: var(--color-background); color: var(--color-text); border: 1px dashed var(--color-accent);">${text}</div>`;
+                    showToast("Description generated successfully!", true);
+
+                } catch (error) {
+                    console.error("Gemini Listing Generation Error:", error);
+                    outputEl.innerHTML = `<p style="color: #d32f2f;"><i class="fas fa-exclamation-triangle"></i> Generation failed. Service error.</p>`;
+                    showToast("Error generating listing. Check console for details.", false);
+                }
+            }
+
+            generateListingBtn.addEventListener('click', function () {
+                const productName = document.getElementById('listingProductName').value.trim();
+                const keyPoints = document.getElementById('listingKeyPoints').value.trim();
+                
+                if (!productName || !keyPoints) {
+                    showToast(translations[currentLang]['toast-error-listing'], false);
+                    return;
+                }
+                generateProductDescription(productName, keyPoints);
+            });
+        
+            const chatInput = document.getElementById("chatInput");
+            const sendChatBtn = document.getElementById("sendChatBtn");
+
+            const handleChat = () => {
+                const prompt = chatInput.value.trim();
+                if (prompt) {
+                    appendMessage("user", prompt);
+                    chatInput.value = "";
+                    askAgriGemini(prompt);
+                }
+            };
+
+            sendChatBtn.addEventListener('click', handleChat);
+            chatInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleChat();
+                }
+            });
+
+            const drawerOverlay = document.getElementById('drawerOverlay');
+            const drawer = document.getElementById('buySellDrawer');
+            const drawerTitle = document.getElementById('drawerTitle');
+            const drawerInstruction = document.getElementById('drawerInstruction');
+            const drawerPriceInput = document.getElementById('drawerPrice');
+            const drawerActionBtn = document.getElementById('drawerActionBtn');
+            const drawerImageLabel = document.getElementById('drawerImageLabel');
+            const drawerImageInput = document.getElementById('drawerImage');
+            const drawerImagePreview = document.getElementById('drawerImagePreview');
+            let drawerImageDataUrl = '';
+
+            drawerImageInput.addEventListener('change', () => {
+                const file = drawerImageInput.files[0];
+                if (!file) {
+                    drawerImageDataUrl = '';
+                    drawerImagePreview.style.display = 'none';
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    drawerImageDataUrl = e.target.result;
+                    drawerImagePreview.src = drawerImageDataUrl;
+                    drawerImagePreview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            });
+
+            function openDrawer(type) {
+                const isBuy = type === 'buy';
+                drawerTitle.textContent = isBuy ? 'Quick Buy Product' : 'Quick Sell Product';
+                drawerInstruction.textContent = isBuy 
+                    ? 'Enter the product you want to buy and add it to your cart (mock transaction).'
+                    : 'Enter the product you want to sell, set a price, and add a photo (mock listing).';
+                
+                drawerPriceInput.style.display = isBuy ? 'none' : 'block';
+                drawerImageLabel.style.display = isBuy ? 'none' : 'block';
+                drawerImageInput.style.display = isBuy ? 'none' : 'block';
+                drawerActionBtn.textContent = isBuy ? 'Add Mock Item to Cart' : 'Post & Add to Cart';
+                drawerActionBtn.setAttribute('data-action', type);
+
+                drawerOverlay.classList.add('visible');
+                drawer.classList.add('visible');
+                document.body.style.overflow = 'hidden'; // Prevent background scrolling
+            }
+
+            window.closeDrawer = function() {
+                drawerOverlay.classList.remove('visible');
+                drawer.classList.remove('visible');
+                document.body.style.overflow = '';
+                document.getElementById('drawerName').value = '';
+                document.getElementById('drawerQty').value = '';
+                drawerPriceInput.value = '';
+                drawerImageInput.value = '';
+                drawerImageDataUrl = '';
+                drawerImagePreview.style.display = 'none';
+                drawerImagePreview.src = '';
+            }
+            
+            
+            document.getElementById('openQuickSell').addEventListener('click', () => openDrawer('sell'));
+            document.getElementById('openQuickBuy').addEventListener('click', () => openDrawer('buy'));
+
+            
+            drawerActionBtn.addEventListener('click', function() {
+                const name = document.getElementById('drawerName').value.trim();
+                const qty = document.getElementById('drawerQty').value;
+                const type = this.getAttribute('data-action');
+                
+                if (!name || isNaN(qty) || parseInt(qty) <= 0) {
+                    showToast("Please enter a valid product name and quantity.", false);
+                    return;
+                }
+
+                if (type === 'sell') {
+                    const price = document.getElementById('drawerPrice').value;
+                    if (isNaN(price) || parseFloat(price) <= 0) {
+                        showToast("Please enter a valid price to sell.", false);
+                        return;
+                    }
+                    if (!drawerImageDataUrl) {
+                        showToast(translations[currentLang]['toast-error-image'], false);
+                        return;
+                    }
+                    addProductListing(name, qty, price, drawerImageDataUrl);
+                } else {
+                    const price = 100; // Default price for mock buy
+                    addToCart(name, qty, price);
+                }
+
+                closeDrawer();
+            });
+        });
+</script>
+     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
@@ -43,6 +2996,9 @@
                 <button type="button" class="back-link" id="backFromFarmerBtn"><i class="fas fa-arrow-left"></i> Back</button>
                 <h3><i class="fas fa-tractor"></i> Farmer Details</h3>
 
+                <div id="googleBtnFarmer" class="google-btn-slot"></div>
+                <div class="google-divider"><span>or enter your details</span></div>
+
                 <label for="farmerName">Your Name</label>
                 <input type="text" id="farmerName" placeholder="Enter your full name" required aria-required="true">
 
@@ -61,6 +3017,9 @@
                 <button type="button" class="back-link" id="backFromBuyerBtn"><i class="fas fa-arrow-left"></i> Back</button>
                 <h3><i class="fas fa-basket-shopping"></i> Buyer Details</h3>
 
+                <div id="googleBtnBuyer" class="google-btn-slot"></div>
+                <div class="google-divider"><span>or enter your details</span></div>
+
                 <label for="buyerName">Your Name</label>
                 <input type="text" id="buyerName" placeholder="Enter your full name" required aria-required="true">
 
@@ -78,6 +3037,14 @@
 
     <header>
         <div class="controls-panel">
+            <div class="tooltip-container farmer-only" id="notifBellContainer">
+                <button class="notif-bell-btn" id="notifBellBtn" aria-label="Notifications">
+                    <i class="fas fa-bell"></i>
+                    <span id="notifBadge" class="notif-badge" style="display:none;">0</span>
+                </button>
+                <span class="tooltip-text">Notifications</span>
+                <div id="notifDropdown" class="notif-dropdown"></div>
+            </div>
             <div class="tooltip-container" id="profileBar">
                 <div class="profile-info">
                     <div class="profile-avatar" id="profileAvatar"></div>
@@ -132,6 +3099,9 @@
                     <input type="text" id="sellName" placeholder="Enter Product Name" aria-label="Product Name for sale">
                     <input type="number" id="sellQty" placeholder="Enter Quantity (kg/units)" aria-label="Product Quantity for sale">
                     <input type="number" id="sellPrice" placeholder="Enter Price (₹)" aria-label="Product Price">
+                    <label for="sellImage" class="sell-image-label" data-key="sell-image-label">Add a Photo of the Vegetable (required) 📷</label>
+                    <input type="file" id="sellImage" accept="image/*" aria-label="Upload or capture a photo of the product">
+                    <img id="sellImagePreview" class="product-image-preview" alt="Product photo preview" style="display:none;">
                     <button id="postForSaleBtn" data-key="sell-button">Post for Sale</button>
                 </div>
                 <!-- AI Product Listing part will be here gyus -->
@@ -317,6 +3287,9 @@
             <input type="text" id="drawerName" placeholder="Product Name" aria-label="Product Name">
             <input type="number" id="drawerQty" placeholder="Quantity (kg/units)" aria-label="Quantity">
             <input type="number" id="drawerPrice" placeholder="Price (₹)" aria-label="Price" style="display: none;">
+            <label for="drawerImage" id="drawerImageLabel" class="sell-image-label" style="display: none;">Add a Photo of the Vegetable (required) 📷</label>
+            <input type="file" id="drawerImage" accept="image/*" aria-label="Upload or capture a photo of the product" style="display: none;">
+            <img id="drawerImagePreview" class="product-image-preview" alt="Product photo preview" style="display:none;">
             <button id="drawerActionBtn" class="market-form-button">Add to Cart</button>
         </div>
 
