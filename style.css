@@ -454,6 +454,20 @@
             border: 2px solid var(--color-primary);
         }
 
+        /* Category badge shown on each product listing */
+        .category-badge {
+            display: inline-block;
+            background: var(--color-accent);
+            color: var(--color-text);
+            font-size: 0.75em;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin-right: 8px;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+
         html {
             scroll-behavior: smooth;
             /* Disable native overflow-x for the sliding panel effect */
@@ -688,7 +702,7 @@
         .market-form:hover {
             transform: translateY(-5px);
         }
-        .market-form input, .market-form button {
+        .market-form input, .market-form select, .market-form button {
             display: block;
             width: 100%;
             margin: 10px 0;
