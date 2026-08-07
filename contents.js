@@ -1,4 +1,4 @@
-aconst API_KEY = ""; 
+const API_KEY = ""; 
 
 /* =====================================================================
    GOOGLE SIGN-IN SETUP
@@ -194,9 +194,22 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             const AUTH_STORAGE_KEY = 'agriUserProfile';
             const PRODUCTS_STORAGE_KEY = 'agriProductListings';
             const NOTIF_STORAGE_KEY = 'agriFarmerNotifications';
+            const FARMER_ID_KEY = 'agriFarmerDeviceId';
             // Declared early so functions that read it (e.g. renderNotifications, called from
             // initAuth on page load) never run before it's initialized.
             let currentLang = 'en';
+
+            // A stable ID for "this farmer on this device", so listings stay tied to the
+            // farmer even if they retype their name slightly differently on a later login
+            // (different capitalization, extra space, etc). Persists across logout/login.
+            function getOrCreateFarmerId() {
+                let id = localStorage.getItem(FARMER_ID_KEY);
+                if (!id) {
+                    id = 'f_' + Date.now() + '_' + Math.random().toString(16).slice(2);
+                    localStorage.setItem(FARMER_ID_KEY, id);
+                }
+                return id;
+            }
 
             const loginOverlay = document.getElementById('loginOverlay');
             const roleSelectStep = document.getElementById('roleSelectStep');
@@ -224,6 +237,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
 
             let farmerPhotoDataUrl = '';
             let currentUser = null;
+            // Latest product listings synced from Firestore (see firebase-init.js).
+            let cachedProducts = [];
             let pendingGoogleRole = null;
             let farmerGoogleEmail = '';
             let buyerGoogleEmail = '';
@@ -446,15 +461,21 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             /* PRODUCT LISTINGS — Farmer lists, Buyer browses/buys   */
             /* ===================================================== */
             function loadProductListings() {
-                try {
-                    return JSON.parse(localStorage.getItem(PRODUCTS_STORAGE_KEY)) || [];
-                } catch (e) {
-                    return [];
-                }
+                // Product listings now live in Firestore (shared across every
+                // device) via firebase-init.js. cachedProducts always holds
+                // the most recent synced snapshot; this getter just exposes
+                // it under the old name so the rest of the code is unchanged.
+                return cachedProducts;
             }
 
-            function saveProductListings(products) {
-                localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
+            window.onProductsUpdated = function (products) {
+                cachedProducts = products;
+                renderProductListings();
+            };
+            // In case Firestore's first snapshot arrived before this page's
+            // script finished loading, pick up whatever was already synced.
+            if (window.__agriLatestProducts && window.__agriLatestProducts.length) {
+                cachedProducts = window.__agriLatestProducts;
             }
 
             // Farmers may only list products under these fixed categories.
@@ -466,7 +487,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 'Tools': '🛠️'
             };
 
-            function addProductListing(name, qty, price, imageDataUrl, category) {
+            async function addProductListing(name, qty, price, imageDataUrl, category) {
                 if (!currentUser || currentUser.role !== 'farmer') return;
                 if (!name || isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
                     showToast(translations[currentLang]['toast-error-fields'], false);
@@ -480,32 +501,41 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     showToast(translations[currentLang]['toast-error-image'], false);
                     return;
                 }
-                const products = loadProductListings();
-                products.push({
-                    id: Date.now() + Math.random().toString(16).slice(2),
-                    name,
-                    qty: parseInt(qty),
-                    price: parseFloat(price),
-                    farmerName: currentUser.name,
-                    farmerPlace: currentUser.place || '',
-                    image: imageDataUrl,
-                    category
-                });
-                saveProductListings(products);
-                renderProductListings();
-                showToast(`${name} has been listed for sale!`, true);
+                if (typeof window.fbAddProduct !== 'function') {
+                    showToast('Marketplace sync is still connecting. Please try again in a moment.', false);
+                    return;
+                }
+                try {
+                    await window.fbAddProduct({
+                        name,
+                        qty: parseInt(qty),
+                        price: parseFloat(price),
+                        farmerName: currentUser.name,
+                        farmerPlace: currentUser.place || '',
+                        farmerId: getOrCreateFarmerId(),
+                        image: imageDataUrl,
+                        category
+                    });
+                    showToast(`${name} has been listed for sale!`, true);
+                } catch (err) {
+                    console.error('Failed to add product listing:', err);
+                    showToast('Could not post listing. Check your connection and try again.', false);
+                }
             }
 
-            window.removeProductListing = function (id) {
-                const products = loadProductListings().filter(p => p.id !== id);
-                saveProductListings(products);
-                renderProductListings();
-                showToast('Listing removed.', true);
+            window.removeProductListing = async function (id) {
+                if (typeof window.fbRemoveProduct !== 'function') return;
+                try {
+                    await window.fbRemoveProduct(id);
+                    showToast('Listing removed.', true);
+                } catch (err) {
+                    console.error('Failed to remove listing:', err);
+                    showToast('Could not remove listing. Check your connection and try again.', false);
+                }
             };
 
-            window.buyProductListing = function (id) {
-                const products = loadProductListings();
-                const product = products.find(p => p.id === id);
+            window.buyProductListing = async function (id) {
+                const product = cachedProducts.find(p => p.id === id);
                 if (!product || product.qty <= 0) return;
 
                 const qtyInput = document.getElementById(`buyQty-${id}`);
@@ -517,10 +547,18 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     return;
                 }
 
-                // Reduce the remaining stock by the quantity bought
-                product.qty -= requestedQty;
-                saveProductListings(products);
-                renderProductListings();
+                if (typeof window.fbUpdateProductQty !== 'function') {
+                    showToast('Marketplace sync is still connecting. Please try again in a moment.', false);
+                    return;
+                }
+
+                try {
+                    await window.fbUpdateProductQty(id, product.qty - requestedQty);
+                } catch (err) {
+                    console.error('Failed to update stock:', err);
+                    showToast('Could not complete purchase. Check your connection and try again.', false);
+                    return;
+                }
 
                 const buyerName = (currentUser && currentUser.name) ? currentUser.name : 'A buyer';
                 const unitWordEn = requestedQty > 1 ? 'units' : 'unit';
@@ -539,7 +577,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
 
                 const myListingsItems = document.getElementById('myListingsItems');
                 if (myListingsItems) {
-                    const mine = products.filter(p => p.farmerName === currentUser.name);
+                    const myFarmerId = getOrCreateFarmerId();
+                    const mine = products.filter(p => p.farmerId ? p.farmerId === myFarmerId : p.farmerName === currentUser.name);
                     if (mine.length === 0) {
                         myListingsItems.innerHTML = `<p>You haven't listed any products yet.</p>`;
                     } else {
@@ -1032,11 +1071,16 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     'sec-video-p': 'Watch these helpful videos on crop cultivation, soil health, and modern farming practices.',
                     'sec-scheme-title': 'Government Schemes for Farmers',
                     'sec-scheme-p': 'Here are some important government schemes designed to support farmers. Click on the links to learn more and apply:',
-                    'scheme-1-desc': 'Pradhan Mantri Kisan Samman Nidhi (PM-KISAN) – Direct income support of ₹6,000 annually to farmers.',
-                    'scheme-2-desc': 'Pradhan Mantri Fasal Bima Yojana (PMFBY) – Crop insurance for farmers against natural calamities.',
-                    'scheme-3-desc': 'Soil Health Card Scheme – Provides farmers with soil health reports and recommendations.',
-                    'scheme-4-desc': 'Agriculture Infrastructure Fund (AIF) – Financial support for developing agricultural infrastructure.',
-                    'scheme-5-desc': 'National Agriculture Market (eNAM) – Online trading platform for farmers to sell their produce.',
+                    'scheme-1-title': 'Pradhan Mantri Kisan Samman Nidhi (PM-KISAN)',
+                    'scheme-1-desc': 'Direct income support of ₹6,000 annually to farmers.',
+                    'scheme-2-title': 'Pradhan Mantri Fasal Bima Yojana (PMFBY)',
+                    'scheme-2-desc': 'Crop insurance for farmers against natural calamities.',
+                    'scheme-3-title': 'Soil Health Card Scheme',
+                    'scheme-3-desc': 'Provides farmers with soil health reports and recommendations.',
+                    'scheme-4-title': 'Agriculture Infrastructure Fund (AIF)',
+                    'scheme-4-desc': 'Financial support for developing agricultural infrastructure.',
+                    'scheme-5-title': 'National Agriculture Market (eNAM)',
+                    'scheme-5-desc': 'Online trading platform for farmers to sell their produce.',
                     'sec-contact-title': 'Contact Us',
                     'contact-info-1': 'Email: support@farmerplatform.in',
                     'contact-info-2': 'Helpline: +91 7393953233',
@@ -1097,11 +1141,16 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     'sec-video-p': 'फसल की खेती, मिट्टी के स्वास्थ्य और आधुनिक कृषि पद्धतियों पर ये सहायक वीडियो देखें।',
                     'sec-scheme-title': 'किसानों के लिए सरकारी योजनाएँ',
                     'sec-scheme-p': 'यहां किसानों का समर्थन करने के लिए डिज़ाइन की गई कुछ महत्वपूर्ण सरकारी योजनाएँ दी गई हैं। अधिक जानने और आवेदन करने के लिए लिंक पर क्लिक करें:',
-                    'scheme-1-desc': 'प्रधान मंत्री किसान सम्मान निधि (पीएम-किसान) – किसानों को सालाना ₹6,000 का सीधा आय समर्थन।',
-                    'scheme-2-desc': 'प्रधान मंत्री फसल बीमा योजना (पीएमएफबीवाई) – प्राकृतिक आपदाओं के खिलाफ किसानों के लिए फसल बीमा।',
-                    'scheme-3-desc': 'मृदा स्वास्थ्य कार्ड योजना – किसानों को मिट्टी के स्वास्थ्य की रिपोर्ट और सिफारिशें प्रदान करती है।',
-                    'scheme-4-desc': 'कृषि अवसंरचना कोष (एआईएफ) – कृषि अवसंरचना के विकास के लिए वित्तीय सहायता।',
-                    'scheme-5-desc': 'राष्ट्रीय कृषि बाजार (ई-नाम) – किसानों को अपनी उपज बेचने के लिए ऑनलाइन ट्रेडिंग प्लेटफॉर्म।',
+                    'scheme-1-title': 'प्रधान मंत्री किसान सम्मान निधि (पीएम-किसान)',
+                    'scheme-1-desc': 'किसानों को सालाना ₹6,000 का सीधा आय समर्थन।',
+                    'scheme-2-title': 'प्रधान मंत्री फसल बीमा योजना (पीएमएफबीवाई)',
+                    'scheme-2-desc': 'प्राकृतिक आपदाओं के खिलाफ किसानों के लिए फसल बीमा।',
+                    'scheme-3-title': 'मृदा स्वास्थ्य कार्ड योजना',
+                    'scheme-3-desc': 'किसानों को मिट्टी के स्वास्थ्य की रिपोर्ट और सिफारिशें प्रदान करती है।',
+                    'scheme-4-title': 'कृषि अवसंरचना कोष (एआईएफ)',
+                    'scheme-4-desc': 'कृषि अवसंरचना के विकास के लिए वित्तीय सहायता।',
+                    'scheme-5-title': 'राष्ट्रीय कृषि बाजार (ई-नाम)',
+                    'scheme-5-desc': 'किसानों को अपनी उपज बेचने के लिए ऑनलाइन ट्रेडिंग प्लेटफॉर्म।',
                     'sec-contact-title': 'हमसे संपर्क करें',
                     'contact-info-1': 'ईमेल: support@farmerplatform.in',
                     'contact-info-2': 'हेल्पलाइन: +91 7393953233',
