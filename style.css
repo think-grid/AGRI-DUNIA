@@ -184,6 +184,41 @@
         }
 
         /* ========================================= */
+        /* GOOGLE SIGN-IN (login forms) */
+        /* ========================================= */
+        .google-btn-slot {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 14px;
+            min-height: 40px;
+        }
+        .google-btn-slot:empty {
+            display: none;
+        }
+        .google-divider {
+            display: flex;
+            align-items: center;
+            text-align: center;
+            color: var(--color-text);
+            opacity: 0.6;
+            font-size: 0.8em;
+            margin-bottom: 14px;
+        }
+        .google-btn-slot:empty + .google-divider {
+            display: none;
+        }
+        .google-divider::before,
+        .google-divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid var(--color-card-border);
+        }
+        .google-divider span {
+            padding: 0 10px;
+            white-space: nowrap;
+        }
+
+        /* ========================================= */
         /* PROFILE BAR (header) */
         /* ========================================= */
         #profileBar {
@@ -252,6 +287,79 @@
         }
 
         /* ========================================= */
+        /* NOTIFICATION BELL (Farmer purchase alerts) */
+        /* ========================================= */
+        .notif-bell-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 16px;
+            position: relative;
+        }
+        .notif-badge {
+            position: absolute;
+            top: -3px;
+            right: -3px;
+            background: #d32f2f;
+            color: #fff;
+            font-size: 0.62em;
+            font-weight: 700;
+            min-width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            align-items: center;
+            justify-content: center;
+            padding: 0 3px;
+            line-height: 1;
+        }
+        .notif-dropdown {
+            display: none;
+            position: absolute;
+            top: 130%;
+            right: 0;
+            width: 280px;
+            max-height: 320px;
+            overflow-y: auto;
+            background: var(--color-card-bg);
+            color: var(--color-text);
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            z-index: 60;
+            padding: 8px;
+            text-align: left;
+        }
+        .notif-dropdown.open {
+            display: block;
+        }
+        .notif-item {
+            padding: 10px;
+            border-bottom: 1px solid var(--color-card-border);
+            font-size: 0.85em;
+            line-height: 1.4;
+        }
+        .notif-item:last-child { border-bottom: none; }
+        .notif-item.unread {
+            background: rgba(56, 142, 60, 0.1);
+            border-radius: 6px;
+        }
+        .notif-item .notif-time {
+            display: block;
+            font-size: 0.8em;
+            opacity: 0.65;
+            margin-top: 3px;
+        }
+        .notif-empty {
+            padding: 16px;
+            text-align: center;
+            opacity: 0.7;
+            font-size: 0.85em;
+            margin: 0;
+        }
+
+        /* ========================================= */
         /* ROLE-BASED VISIBILITY (Farmer vs Buyer menus) */
         /* ========================================= */
         .farmer-only, .buyer-only {
@@ -309,6 +417,41 @@
         }
         .listing-item .remove-btn:hover {
             background: #b71c1c;
+        }
+        .listing-item-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .listing-item-thumb {
+            width: 56px;
+            height: 56px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 1px solid var(--color-card-border);
+            flex-shrink: 0;
+        }
+
+        /* ========================================= */
+        /* PRODUCT PHOTO UPLOAD (Sell forms & drawer) */
+        /* ========================================= */
+        .sell-image-label {
+            display: block;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.9em;
+            margin: 10px 0 6px;
+            color: var(--color-text);
+        }
+        .product-image-preview {
+            display: block;
+            width: 100%;
+            max-width: 160px;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin: 10px auto;
+            border: 2px solid var(--color-primary);
         }
 
         html {
