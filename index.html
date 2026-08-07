@@ -464,6 +464,20 @@
             border: 2px solid var(--color-primary);
         }
 
+        /* Category badge shown on each product listing */
+        .category-badge {
+            display: inline-block;
+            background: var(--color-accent);
+            color: var(--color-text);
+            font-size: 0.75em;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin-right: 8px;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+
         html {
             scroll-behavior: smooth;
             /* Disable native overflow-x for the sliding panel effect */
@@ -698,7 +712,7 @@
         .market-form:hover {
             transform: translateY(-5px);
         }
-        .market-form input, .market-form button {
+        .market-form input, .market-form select, .market-form button {
             display: block;
             width: 100%;
             margin: 10px 0;
@@ -1412,7 +1426,389 @@
             }
         }
 </style>
-     <script>
+          <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+    <!-- ============================================================ -->
+    <!-- LOGIN / ROLE SELECTION OVERLAY -->
+    <!-- ============================================================ -->
+    <div id="loginOverlay">
+        <div id="loginModal" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle">
+            <div class="login-brand">
+                <h1 id="loginModalTitle"><i class="fa-solid fa-seedling"></i> AGRI दुनिया</h1>
+                <p>Tell us who you are to get started</p>
+            </div>
+
+            <!-- Step 1: Choose role -->
+            <div id="roleSelectStep" class="login-step">
+                <div class="role-cards">
+                    <button type="button" class="role-card" id="chooseFarmerBtn" aria-label="Continue as Farmer">
+                        <i class="fas fa-tractor"></i>
+                        <h3>I am a Farmer</h3>
+                        <p>List your products and sell directly to buyers</p>
+                    </button>
+                    <button type="button" class="role-card" id="chooseBuyerBtn" aria-label="Continue as Buyer">
+                        <i class="fas fa-basket-shopping"></i>
+                        <h3>I am a Buyer</h3>
+                        <p>Browse and buy fresh produce from farmers</p>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 2a: Farmer details -->
+            <form id="farmerLoginForm" class="login-step login-form" style="display:none;">
+                <button type="button" class="back-link" id="backFromFarmerBtn"><i class="fas fa-arrow-left"></i> Back</button>
+                <h3><i class="fas fa-tractor"></i> Farmer Details</h3>
+
+                <div id="googleBtnFarmer" class="google-btn-slot"></div>
+                <div class="google-divider"><span>or enter your details</span></div>
+
+                <label for="farmerName">Your Name</label>
+                <input type="text" id="farmerName" placeholder="Enter your full name" required aria-required="true">
+
+                <label for="farmerPlace">Your Place / Village</label>
+                <input type="text" id="farmerPlace" placeholder="Enter your village or town" required aria-required="true">
+
+                <label for="farmerPhotoInput">Profile Picture (optional)</label>
+                <input type="file" id="farmerPhotoInput" accept="image/*">
+                <img id="farmerPhotoPreview" alt="Profile picture preview" style="display:none;">
+
+                <button type="submit">Continue as Farmer <i class="fas fa-arrow-right"></i></button>
+            </form>
+
+            <!-- Step 2b: Buyer details -->
+            <form id="buyerLoginForm" class="login-step login-form" style="display:none;">
+                <button type="button" class="back-link" id="backFromBuyerBtn"><i class="fas fa-arrow-left"></i> Back</button>
+                <h3><i class="fas fa-basket-shopping"></i> Buyer Details</h3>
+
+                <div id="googleBtnBuyer" class="google-btn-slot"></div>
+                <div class="google-divider"><span>or enter your details</span></div>
+
+                <label for="buyerName">Your Name</label>
+                <input type="text" id="buyerName" placeholder="Enter your full name" required aria-required="true">
+
+                <label for="buyerAddress">Your Address</label>
+                <input type="text" id="buyerAddress" placeholder="Enter your delivery address" required aria-required="true">
+
+                <button type="submit">Continue as Buyer <i class="fas fa-arrow-right"></i></button>
+            </form>
+        </div>
+    </div>
+    <!-- END LOGIN / ROLE SELECTION OVERLAY -->
+
+    <div id="mainAppTop">
+    <div id="welcome-banner">Welcome Farmer <i class="fa-solid fa-seedling"></i></div>
+
+    <header>
+        <div class="controls-panel">
+            <div class="tooltip-container farmer-only" id="notifBellContainer">
+                <button class="notif-bell-btn" id="notifBellBtn" aria-label="Notifications">
+                    <i class="fas fa-bell"></i>
+                    <span id="notifBadge" class="notif-badge" style="display:none;">0</span>
+                </button>
+                <span class="tooltip-text">Notifications</span>
+                <div id="notifDropdown" class="notif-dropdown"></div>
+            </div>
+            <div class="tooltip-container" id="profileBar">
+                <div class="profile-info">
+                    <div class="profile-avatar" id="profileAvatar"></div>
+                    <div class="profile-text">
+                        <span id="profileName"></span>
+                        <span id="profileRole"></span>
+                    </div>
+                    <button id="logoutBtn" aria-label="Logout"><i class="fas fa-right-from-bracket"></i></button>
+                </div>
+            </div>
+            <div class="tooltip-container">
+                <button class="theme-toggle" id="themeToggle" aria-label="Toggle Day-Night Theme">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <span class="tooltip-text">Day/Night Mode</span>
+            </div>
+            <div class="tooltip-container">
+                <button class="lang-toggle" id="langToggle" aria-label="Switch between English and Hindi">
+                    EN/HI
+                </button>
+                <span class="tooltip-text">Translate (English/Hindi)</span>
+            </div>
+        </div>
+        <div class="header-content">
+            <h1 data-key="header-title">AGRI दुनिया</h1>
+            <p data-key="header-tagline">Empowering Farmers with Digital Access to Markets, Knowledge & Government Schemes</p>
+        </div>
+    </header>
+
+    <nav class="navbar">
+        <a href="#marketplace" class="nav-link active" data-target="marketplace" data-key="nav-market" aria-label="Go to Digital Marketplace section"><i class="fas fa-store"></i> Marketplace</a>
+        <a href="#learning" class="nav-link" data-target="learning" data-key="nav-learning" aria-label="Go to Learning Hub section"><i class="fas fa-graduation-cap"></i> Learning Hub</a>
+        <a href="#videos" class="nav-link" data-target="videos" data-key="nav-videos" aria-label="Go to Videos for Farmers section"><i class="fas fa-video"></i> Videos</a>
+        <a href="#schemes" class="nav-link" data-target="schemes" data-key="nav-schemes" aria-label="Go to Government Schemes section"><i class="fas fa-hands-helping"></i> Schemes</a>
+        <a href="#contact" class="nav-link" data-target="contact" data-key="nav-contact" aria-label="Go to Contact Us section"><i class="fas fa-envelope"></i> Contact</a>
+    </nav>
+
+    <div class="container">
+        <!-- Marketplace Section -->
+        <section id="marketplace" class="active-panel">
+            <div class="section-header">
+                <h2 data-key="sec-market-title">Digital Marketplace</h2>
+                <div class="tooltip-container">
+                    <button class="tts-button" data-content-id="marketplace" aria-label="Read this section aloud"><i class="fas fa-volume-up"></i></button>
+                    <span class="tooltip-text">Text-to-Speech</span>
+                </div>
+            </div>
+            <p data-key="sec-market-p">Buy and Sell farm products directly. Farmers can list their crops, and buyers can purchase them directly ensuring fair trade.</p>
+            <div class="card-grid">
+                <div class="market-form farmer-only">
+                    <h3 data-key="sell-title">Sell Your Products</h3>
+                    <label for="sellCategory" class="sell-image-label" data-key="sell-category-label">Product Category (required)</label>
+                    <select id="sellCategory" aria-label="Product Category" required>
+                        <option value="" data-key="category-option-default">-- Select Category --</option>
+                        <option value="Vegetables" data-key="category-option-vegetables">🥦 Vegetables</option>
+                        <option value="Fruits" data-key="category-option-fruits">🍎 Fruits</option>
+                        <option value="Seeds" data-key="category-option-seeds">🌱 Seeds</option>
+                        <option value="Tools" data-key="category-option-tools">🛠️ Tools</option>
+                    </select>
+                    <input type="text" id="sellName" placeholder="Enter Product Name" aria-label="Product Name for sale">
+                    <input type="number" id="sellQty" placeholder="Enter Quantity (kg/units)" aria-label="Product Quantity for sale">
+                    <input type="number" id="sellPrice" placeholder="Enter Price (₹)" aria-label="Product Price">
+                    <label for="sellImage" class="sell-image-label" data-key="sell-image-label">Add a Photo of the Product (required) 📷</label>
+                    <input type="file" id="sellImage" accept="image/*" aria-label="Upload or capture a photo of the product">
+                    <img id="sellImagePreview" class="product-image-preview" alt="Product photo preview" style="display:none;">
+                    <button id="postForSaleBtn" data-key="sell-button">Post for Sale</button>
+                </div>
+            </div>
+
+            <!--  QUICK BUY/SELL BUTTONS will be here -->
+            <div style="text-align: center; margin-top: 30px;">
+                <button id="openQuickSell" class="farmer-only" style="background: var(--color-secondary); color: white; padding: 10px 20px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-right: 10px; transition: transform 0.2s;">
+                    <i class="fas fa-arrow-up"></i> Quick Sell
+                </button>
+                <button id="openQuickBuy" class="buyer-only" style="background: var(--color-accent); color: var(--color-text); padding: 10px 20px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: transform 0.2s;">
+                    <i class="fas fa-shopping-basket"></i> Quick Buy
+                </button>
+            </div>
+            <!-- END  QUICK BUY/SELL BUTTONS will be -->
+
+            <!-- FARMER: My Product Listings -->
+            <div id="myListingsSection" class="farmer-only listings-panel">
+                <h2><i class="fas fa-list"></i> My Product Listings</h2>
+                <div id="myListingsItems"><p>You haven't listed any products yet.</p></div>
+            </div>
+
+            <!-- BUYER: Available Products from Farmers -->
+            <div id="availableProductsSection" class="buyer-only listings-panel">
+                <h2><i class="fas fa-store"></i> Products Available to Buy</h2>
+                <div id="availableProductsItems"><p>No products listed yet. Check back soon!</p></div>
+            </div>
+
+            <div id="cartSection" style="margin-top:30px; padding:20px; border-radius:8px;">
+                <h2 data-key="cart-title">Your Cart</h2>
+                <div id="cartItems"><p data-key="cart-empty">Your cart is empty.</p></div>
+            </div>
+        </section>
+
+        <!-- Learning Hub Section fr -->
+        <section id="learning">
+            <div class="section-header">
+                <h2 data-key="sec-learning-title">Learning Hub</h2>
+                <div class="tooltip-container">
+                    <button class="tts-button" data-content-id="learning" aria-label="Read this section aloud"><i class="fas fa-volume-up"></i></button>
+                    <span class="tooltip-text">Text-to-Speech</span>
+                </div>
+            </div>
+            <p data-key="sec-learning-p">Learn modern farming techniques, productivity improvement, and crop management through our platform.</p>
+
+            <div class="card-grid">
+                <div class="learning-card" data-topic="irrigation" tabindex="0" role="button" aria-label="Open easy guide: Modern Irrigation Techniques">
+                    <i class="fas fa-water"></i>
+                    <h4 data-key="course-1-title">Modern Irrigation Techniques</h4>
+                    <p data-key="course-1-desc">Optimize water usage with drip and sprinkler systems. Learn smart water management.</p>
+                    <span class="tap-hint" data-key="tap-hint">👉 Tap to see easy guide</span>
+                </div>
+                <div class="learning-card" data-topic="organic" tabindex="0" role="button" aria-label="Open easy guide: Organic Farming">
+                    <i class="fas fa-leaf"></i>
+                    <h4 data-key="course-2-title">Organic Farming</h4>
+                    <p data-key="course-2-desc">Master the techniques of natural, chemical-free cultivation and soil enrichment.</p>
+                    <span class="tap-hint" data-key="tap-hint">👉 Tap to see easy guide</span>
+                </div>
+                <div class="learning-card" data-topic="insurance" tabindex="0" role="button" aria-label="Open easy guide: Crop Insurance Awareness">
+                    <i class="fas fa-chart-line"></i>
+                    <h4 data-key="course-3-title">Crop Insurance Awareness</h4>
+                    <p data-key="course-3-desc">Understand policy details and claims process for securing your harvest against risks.</p>
+                    <span class="tap-hint" data-key="tap-hint">👉 Tap to see easy guide</span>
+                </div>
+                <div class="learning-card" data-topic="cloud" tabindex="0" role="button" aria-label="Open easy guide: Cloud Integration and e-Learning">
+                    <i class="fas fa-cloud"></i>
+                    <h4 data-key="course-4-title">Cloud Integration & e-Learning</h4>
+                    <p data-key="course-4-desc">Utilize cloud tools for data management and access to digital agricultural resources.</p>
+                    <span class="tap-hint" data-key="tap-hint">👉 Tap to see easy guide</span>
+                </div>
+            </div>
+
+            <div id="ai-recommendation">
+                <i class="fas fa-robot fa-2x"></i>
+                <h3 data-key="ai-chat-title">✨ Agri-Gemini: Instant Crop Advisor</h3>
+                <p data-key="ai-desc" style="margin-bottom: 20px;">Ask me anything about farming techniques, market trends, or pest management!</p>
+                
+                <div id="agriChatContainer" style="text-align: center;">
+                    <div id="chatHistory" style="text-align: left; padding: 10px; min-height: 200px; max-height: 300px; overflow-y: auto; background: var(--color-background); border-radius: 8px; border: 1px solid var(--color-card-border);">
+                        <div class="chat-message ai"><div class="message-bubble">Hello! I'm Agri-Gemini, your AI crop expert. Ask me anything about farming techniques, pests, or market advice.</div></div>
+                    </div>
+                    <input type="text" id="chatInput" placeholder="Ask your question here..." style="width: 100%; padding: 12px; margin-top: 15px; border-radius: 6px; border: 1px solid var(--color-card-border); background: var(--color-card-bg); color: var(--color-text);">
+                    <button id="sendChatBtn" style="margin-top: 10px; padding: 12px; width: 100%; background: var(--color-accent); color: var(--color-text); font-weight: 700; border: none; border-radius: 6px; transition: background 0.3s;">
+                        Get Advice ✨
+                    </button>
+                    <audio id="ttsAudio" style="display: none;"></audio>
+                </div>
+            </div>
+        </section>
+
+        <!-- Videos Section -->
+        <section id="videos">
+            <div class="section-header">
+                <h2 data-key="sec-video-title">Videos for Farmers</h2>
+                <div class="tooltip-container">
+                    <button class="tts-button" data-content-id="videos" aria-label="Read this section aloud"><i class="fas fa-volume-up"></i></button>
+                    <span class="tooltip-text">Text-to-Speech</span>
+                </div>
+            </div>
+            <p data-key="sec-video-p">Watch these helpful videos on crop cultivation, soil health, and modern farming practices.</p>
+            <div class="video-container">
+                <div class="video-wrapper">
+                    <iframe src="https://www.youtube.com/embed/B5ffwYfJv5w" title="Video 1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                </div>
+                <div class="video-wrapper">
+                    <iframe src="https://www.youtube.com/embed/bNIafzHT_Go" title="Video 2" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                </div>
+                <div class="video-wrapper">
+                    <iframe src="https://www.youtube.com/embed/lbzJiVDnL_k" title="Video 3" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                </div>
+            </div>
+        </section>
+
+        <!-- Schemes Section should be  -->
+        <section id="schemes">
+            <div class="section-header">
+                <h2 data-key="sec-scheme-title">Government Schemes for Farmers</h2>
+                <div class="tooltip-container">
+                    <!-- Updated TTS button to reflect use of Gemini API for Schemes -->
+                    <button class="tts-button" data-content-id="schemes" aria-label="Read this section aloud"><i class="fas fa-volume-up"></i></button>
+                    <span class="tooltip-text">Text-to-Speech (High Quality)</span>
+                </div>
+            </div>
+            <p data-key="sec-scheme-p">Here are some important government schemes designed to support farmers. Click on the links to learn more and apply:</p>
+            <ul class="scheme-list">
+                <li data-key="scheme-1-desc"><a href="https://pmkisan.gov.in/" target="_blank">Pradhan Mantri Kisan Samman Nidhi (PM-KISAN)</a> – Direct income support of ₹6,000 annually to farmers.</li>
+                <li data-key="scheme-2-desc"><a href="https://pmfby.gov.in/" target="_blank">Pradhan Mantri Fasal Bima Yojana (PMFBY)</a> – Crop insurance for farmers against natural calamities.</li>
+                <li data-key="scheme-3-desc"><a href="https://soilhealth.dac.gov.in/" target="_blank">Soil Health Card Scheme</a> – Provides farmers with soil health reports and recommendations.</li>
+                <li data-key="scheme-4-desc"><a href="https://agriinfra.dac.gov.in/" target="_blank">Agriculture Infrastructure Fund (AIF)</a> – Financial support for developing agricultural infrastructure.</li>
+                <li data-key="scheme-5-desc"><a href="https://www.enam.gov.in/web/" target="_blank">National Agriculture Market (eNAM)</a> – Online trading platform for farmers to sell their produce.</li>
+            </ul>
+        </section>
+
+        <!-- Contact Section 
+         i should also add better gmail id -->
+        <section id="contact">
+            <div class="section-header">
+                <h2 data-key="sec-contact-title">Contact Us</h2>
+                <div class="tooltip-container">
+                    <button class="tts-button" data-content-id="contact" aria-label="Read this section aloud"><i class="fas fa-volume-up"></i></button>
+                    <span class="tooltip-text">Text-to-Speech</span>
+                </div>
+            </div>
+            <p data-key="contact-info-1">Email:thinkgridquiz@gmail.com</p>
+            <p data-key="contact-info-2">Helpline: +91 7393953233</p>
+            
+            <form class="contact-form" id="contactForm" aria-label="Contact Form">
+                <label for="contactName" data-key="form-label-name">Name</label>
+                <input type="text" id="contactName" name="name" required aria-required="true" aria-label="Your Name">
+                
+                <label for="contactEmail" data-key="form-label-email">Email</label>
+                <input type="email" id="contactEmail" name="email" required aria-required="true" aria-label="Your Email">
+                
+                <label for="contactMessage" data-key="form-label-message">Message</label>
+                <textarea id="contactMessage" name="message" rows="5" required aria-required="true" aria-label="Your Message"></textarea>
+                
+                <button type="submit" data-key="form-button-send">Send Message</button>
+            </form>
+        </section>
+    </div>
+    </div>
+    <!-- END mainAppTop -->
+
+    <div id="toast-message"></div>
+
+    <!-- NEW DRAWER/MODAL STRUCTURE -->
+    <div id="drawerOverlay" onclick="closeDrawer()"></div>
+    <div id="buySellDrawer">
+        <button class="close-button" onclick="closeDrawer()"><i class="fas fa-times"></i></button>
+        <h3 id="drawerTitle"></h3>
+        <p id="drawerInstruction"></p>
+        
+        <div class="market-form" style="background: var(--color-card-bg); box-shadow: none;">
+            <label for="drawerCategory" id="drawerCategoryLabel" class="sell-image-label" style="display: none;">Product Category (required)</label>
+            <select id="drawerCategory" aria-label="Product Category" style="display: none;">
+                <option value="">-- Select Category --</option>
+                <option value="Vegetables">🥦 Vegetables</option>
+                <option value="Fruits">🍎 Fruits</option>
+                <option value="Seeds">🌱 Seeds</option>
+                <option value="Tools">🛠️ Tools</option>
+            </select>
+            <input type="text" id="drawerName" placeholder="Product Name" aria-label="Product Name">
+            <input type="number" id="drawerQty" placeholder="Quantity (kg/units)" aria-label="Quantity">
+            <input type="number" id="drawerPrice" placeholder="Price (₹)" aria-label="Price" style="display: none;">
+            <label for="drawerImage" id="drawerImageLabel" class="sell-image-label" style="display: none;">Add a Photo of the Product (required) 📷</label>
+            <input type="file" id="drawerImage" accept="image/*" aria-label="Upload or capture a photo of the product" style="display: none;">
+            <img id="drawerImagePreview" class="product-image-preview" alt="Product photo preview" style="display:none;">
+            <button id="drawerActionBtn" class="market-form-button">Add to Cart</button>
+        </div>
+
+        <p style="margin-top: 20px; font-size: 0.8em; color: var(--color-text);">
+            Note: This quick panel is for demonstration. All items are added to your local cart.
+        </p>
+    </div>
+    <!-- END NEW DRAWER/MODAL STRUCTURE -->
+
+    <!-- EASY LEARNING GUIDE MODAL - looks like a hand-made notebook page -->
+    <div id="techniqueOverlay" onclick="closeTechniqueModal()"></div>
+    <div id="techniqueModal" role="dialog" aria-modal="true" aria-labelledby="techniqueModalTitle">
+        <div class="pin" aria-hidden="true"></div>
+        <div class="tape tape-left" aria-hidden="true"></div>
+        <div class="tape tape-right" aria-hidden="true"></div>
+        <button class="close-button" onclick="closeTechniqueModal()" aria-label="Close guide"><i class="fas fa-times"></i></button>
+
+        <div class="technique-header">
+            <span id="techniqueEmoji" class="technique-emoji">🌱</span>
+            <h3 id="techniqueModalTitle"></h3>
+        </div>
+
+        <button id="techniqueListenBtn" class="listen-btn" aria-label="Listen to this guide">
+            <i class="fas fa-volume-up"></i> <span id="listenLabel" data-key="listen-label">Listen</span>
+        </button>
+
+        <div id="techniqueDiagram" class="technique-diagram"></div>
+
+        <div class="technique-steps-label" data-key="steps-label">✍️ Steps to follow:</div>
+        <div id="techniqueSteps" class="technique-steps"></div>
+
+        <div id="techniqueTip" class="technique-tip"></div>
+    </div>
+    <!-- END EASY LEARNING GUIDE MODAL -->
+
+
+    <div id="mainAppFooter">
+    <footer>
+        <div class="visitor-counter" data-key="footer-visits">
+            <span id="personalVisitorText"></span> 
+            <span id="visitorCount" class="personal-visits-glow">0</span>
+            <span id="globalVisitorText" style="display: block; font-size: 0.7em; margin-top: 5px;"></span>
+        </div>
+        <p data-key="footer-copyright">2025 Digital Marketplace & Learning Platform for Farmers | All Rights Reserved</p>
+    </footer>
+    </div>
+
+<script>
 const API_KEY = ""; 
 
 /* =====================================================================
@@ -1428,7 +1824,7 @@ const API_KEY = "";
    Until a real Client ID is set, the Google buttons stay hidden and
    the rest of the login flow (name/place/address) works as before.
    ===================================================================== */
-const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.googleusercontent.com";
+const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.googleusercontent.com";
 
 
         
@@ -1872,10 +2268,23 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                 localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
             }
 
-            function addProductListing(name, qty, price, imageDataUrl) {
+            // Farmers may only list products under these fixed categories.
+            const ALLOWED_PRODUCT_CATEGORIES = ['Vegetables', 'Fruits', 'Seeds', 'Tools'];
+            const CATEGORY_ICONS = {
+                'Vegetables': '🥦',
+                'Fruits': '🍎',
+                'Seeds': '🌱',
+                'Tools': '🛠️'
+            };
+
+            function addProductListing(name, qty, price, imageDataUrl, category) {
                 if (!currentUser || currentUser.role !== 'farmer') return;
                 if (!name || isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
                     showToast(translations[currentLang]['toast-error-fields'], false);
+                    return;
+                }
+                if (!ALLOWED_PRODUCT_CATEGORIES.includes(category)) {
+                    showToast(translations[currentLang]['toast-error-category'], false);
                     return;
                 }
                 if (!imageDataUrl) {
@@ -1890,7 +2299,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                     price: parseFloat(price),
                     farmerName: currentUser.name,
                     farmerPlace: currentUser.place || '',
-                    image: imageDataUrl
+                    image: imageDataUrl,
+                    category
                 });
                 saveProductListings(products);
                 renderProductListings();
@@ -1948,7 +2358,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                             <div class="listing-item">
                                 <div class="listing-item-content">
                                     ${p.image ? `<img src="${p.image}" alt="${p.name}" class="listing-item-thumb">` : ''}
-                                    <span><strong>${p.name}</strong> — ${p.qty > 0 ? `${p.qty} units left` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}</span>
+                                    <span>${p.category ? `<span class="category-badge">${CATEGORY_ICONS[p.category] || ''} ${p.category}</span>` : ''}<strong>${p.name}</strong> — ${p.qty > 0 ? `${p.qty} units left` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}</span>
                                 </div>
                                 <button class="remove-btn" onclick="removeProductListing('${p.id}')"><i class="fas fa-trash-alt"></i> Remove</button>
                             </div>
@@ -1965,7 +2375,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                             <div class="listing-item">
                                 <div class="listing-item-content">
                                     ${p.image ? `<img src="${p.image}" alt="${p.name}" class="listing-item-thumb">` : ''}
-                                    <span><strong>${p.name}</strong> — ${p.qty > 0 ? `${p.qty} units available` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}<br>
+                                    <span>${p.category ? `<span class="category-badge">${CATEGORY_ICONS[p.category] || ''} ${p.category}</span>` : ''}<strong>${p.name}</strong> — ${p.qty > 0 ? `${p.qty} units available` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}<br>
                                     <small>Sold by ${p.farmerName}${p.farmerPlace ? ', ' + p.farmerPlace : ''}</small></span>
                                 </div>
                                 ${p.qty > 0 ? `
@@ -2407,11 +2817,14 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                     'sec-market-title': 'Digital Marketplace',
                     'sec-market-p': 'Buy and Sell farm products directly. Farmers can list their crops, and buyers can purchase them directly ensuring fair trade.',
                     'sell-title': 'Sell Your Products',
-                    'generate-title': 'Generate Product Listing ✨',
-                    'generate-button': 'Generate Description ✨',
-                    'listing-placeholder': 'Your professional product description will appear here.',
                     'sell-button': 'Post for Sale',
-                    'sell-image-label': 'Add a Photo of the Vegetable (required) 📷',
+                    'sell-category-label': 'Product Category (required)',
+                    'category-option-default': '-- Select Category --',
+                    'category-option-vegetables': '🥦 Vegetables',
+                    'category-option-fruits': '🍎 Fruits',
+                    'category-option-seeds': '🌱 Seeds',
+                    'category-option-tools': '🛠️ Tools',
+                    'sell-image-label': 'Add a Photo of the Product (required) 📷',
                     'cart-title': 'Your Cart',
                     'cart-empty': 'Your cart is empty.',
                     'sec-learning-title': 'Learning Hub',
@@ -2446,9 +2859,9 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                     'footer-visits': 'Total Visits: ',
                     'toast-success': 'Message sent successfully! We will contact you soon.',
                     'toast-error-fields': 'Please fill all marketplace fields correctly.',
-                    'toast-error-image': 'Please add a photo of the vegetable (from storage or camera) before selling.',
+                    'toast-error-image': 'Please add a photo of the product (from storage or camera) before selling.',
+                    'toast-error-category': 'Please select a category: Vegetables, Fruits, Seeds, or Tools.',
                     'toast-error-search': 'Please enter a product name to search.',
-                    'toast-error-listing': 'Please enter a product name and some key points for the listing generator.',
                     'alert-cart-add': (name) => `${name} added to cart!`,
                     'alert-pay-success': (amount) => `Payment of ₹${amount} successful! Thank you for your purchase.`,
                     'alert-pay-processing': (amount) => `Processing payment of ₹${amount}...`,
@@ -2469,11 +2882,14 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                     'sec-market-title': 'डिजिटल बाज़ार',
                     'sec-market-p': 'कृषि उत्पादों को सीधे खरीदें और बेचें। किसान अपनी फसलें सूचीबद्ध कर सकते हैं, और खरीदार सीधे खरीद सकते हैं, जिससे उचित व्यापार सुनिश्चित होगा।',
                     'sell-title': 'अपने उत्पाद बेचें',
-                    'generate-title': 'उत्पाद लिस्टिंग बनाएं ✨',
-                    'generate-button': 'विवरण बनाएं ✨',
-                    'listing-placeholder': 'आपका पेशेवर उत्पाद विवरण यहां दिखाई देगा।',
                     'sell-button': 'बिक्री के लिए पोस्ट करें',
-                    'sell-image-label': 'सब्ज़ी की फोटो जोड़ें (आवश्यक) 📷',
+                    'sell-category-label': 'उत्पाद श्रेणी (आवश्यक)',
+                    'category-option-default': '-- श्रेणी चुनें --',
+                    'category-option-vegetables': '🥦 सब्ज़ियाँ',
+                    'category-option-fruits': '🍎 फल',
+                    'category-option-seeds': '🌱 बीज',
+                    'category-option-tools': '🛠️ उपकरण',
+                    'sell-image-label': 'उत्पाद की फोटो जोड़ें (आवश्यक) 📷',
                     'cart-title': 'आपका कार्ट',
                     'cart-empty': 'आपका कार्ट खाली है।',
                     'sec-learning-title': 'सीखने का केंद्र',
@@ -2508,9 +2924,9 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                     'footer-visits': 'कुल विज़िट: ',
                     'toast-success': 'संदेश सफलतापूर्वक भेज दिया गया! हम जल्द ही आपसे संपर्क करेंगे।',
                     'toast-error-fields': 'कृपया बाज़ार के सभी फ़ील्ड सही ढंग से भरें।',
-                    'toast-error-image': 'बिक्री से पहले कृपया सब्ज़ी की फोटो जोड़ें (स्टोरेज या कैमरे से)।',
+                    'toast-error-image': 'बिक्री से पहले कृपया उत्पाद की फोटो जोड़ें (स्टोरेज या कैमरे से)।',
+                    'toast-error-category': 'कृपया एक श्रेणी चुनें: सब्ज़ियाँ, फल, बीज, या उपकरण।',
                     'toast-error-search': 'कृपया खोज के लिए उत्पाद का नाम दर्ज करें।',
-                    'toast-error-listing': 'कृपया लिस्टिंग जनरेटर के लिए उत्पाद का नाम और कुछ मुख्य बिंदु दर्ज करें।',
                     'alert-cart-add': (name) => `${name} कार्ट में जोड़ा गया!`,
                     'alert-pay-success': (amount) => `₹${amount} का भुगतान सफल रहा! आपकी खरीद के लिए धन्यवाद।`,
                     'alert-pay-processing': (amount) => `₹${amount} का भुगतान संसाधित हो रहा है...`,
@@ -2758,7 +3174,6 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                 contactForm.reset();
             });
             const sellButton = document.getElementById('postForSaleBtn');
-            const generateListingBtn = document.getElementById('generateListingBtn');
 
             const sellImageInput = document.getElementById('sellImage');
             const sellImagePreview = document.getElementById('sellImagePreview');
@@ -2784,70 +3199,26 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                 const name = document.getElementById('sellName').value.trim();
                 const qty = document.getElementById('sellQty').value;
                 const price = document.getElementById('sellPrice').value;
+                const category = document.getElementById('sellCategory').value;
+                if (!ALLOWED_PRODUCT_CATEGORIES.includes(category)) {
+                    showToast(translations[currentLang]['toast-error-category'], false);
+                    return;
+                }
                 if (!sellImageDataUrl) {
                     showToast(translations[currentLang]['toast-error-image'], false);
                     return;
                 }
-                addProductListing(name, qty, price, sellImageDataUrl);
+                addProductListing(name, qty, price, sellImageDataUrl, category);
                 document.getElementById('sellName').value = "";
                 document.getElementById('sellQty').value = "";
                 document.getElementById('sellPrice').value = "";
+                document.getElementById('sellCategory').value = "";
                 sellImageInput.value = "";
                 sellImageDataUrl = '';
                 sellImagePreview.style.display = 'none';
                 sellImagePreview.src = '';
             });
 
-            async function generateProductDescription(productName, keyPoints) {
-                const outputEl = document.getElementById('listingOutput');
-                outputEl.innerHTML = `<p style="color: var(--color-primary);"><i class="fas fa-spinner fa-spin"></i> Generating...</p>`;
-                
-                const userPrompt = `Generate a compelling and professional online marketplace description for the following product. Keep it concise (max 3 sentences) but highly attractive to buyers.
-                Product Name: ${productName}
-                Key Selling Points: ${keyPoints}`;
-
-                const payload = {
-                    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-                    // No Google Search grounding needed for creative generation
-                    systemInstruction: {
-                        parts: [{ text: "You are an expert agricultural copywriter for an online farmer's marketplace. You write attractive, trustworthy, and concise product listings in an informative but engaging tone." }]
-                    },
-                    config: {
-                        temperature: 0.7 // Higher temperature for more creative output
-                    }
-                };
-
-                try {
-                    const response = await fetchWithBackoff(CHAT_API_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    const result = await response.json();
-                    
-                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "❌ Failed to generate description. Check your network or try again.";
-                    
-                    outputEl.innerHTML = `<div class="message-bubble ai" style="display: block; border-radius: 6px; background: var(--color-background); color: var(--color-text); border: 1px dashed var(--color-accent);">${text}</div>`;
-                    showToast("Description generated successfully!", true);
-
-                } catch (error) {
-                    console.error("Gemini Listing Generation Error:", error);
-                    outputEl.innerHTML = `<p style="color: #d32f2f;"><i class="fas fa-exclamation-triangle"></i> Generation failed. Service error.</p>`;
-                    showToast("Error generating listing. Check console for details.", false);
-                }
-            }
-
-            generateListingBtn.addEventListener('click', function () {
-                const productName = document.getElementById('listingProductName').value.trim();
-                const keyPoints = document.getElementById('listingKeyPoints').value.trim();
-                
-                if (!productName || !keyPoints) {
-                    showToast(translations[currentLang]['toast-error-listing'], false);
-                    return;
-                }
-                generateProductDescription(productName, keyPoints);
-            });
-        
             const chatInput = document.getElementById("chatInput");
             const sendChatBtn = document.getElementById("sendChatBtn");
 
@@ -2877,6 +3248,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
             const drawerImageLabel = document.getElementById('drawerImageLabel');
             const drawerImageInput = document.getElementById('drawerImage');
             const drawerImagePreview = document.getElementById('drawerImagePreview');
+            const drawerCategoryLabel = document.getElementById('drawerCategoryLabel');
+            const drawerCategorySelect = document.getElementById('drawerCategory');
             let drawerImageDataUrl = '';
 
             drawerImageInput.addEventListener('change', () => {
@@ -2903,6 +3276,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                     : 'Enter the product you want to sell, set a price, and add a photo (mock listing).';
                 
                 drawerPriceInput.style.display = isBuy ? 'none' : 'block';
+                drawerCategoryLabel.style.display = isBuy ? 'none' : 'block';
+                drawerCategorySelect.style.display = isBuy ? 'none' : 'block';
                 drawerImageLabel.style.display = isBuy ? 'none' : 'block';
                 drawerImageInput.style.display = isBuy ? 'none' : 'block';
                 drawerActionBtn.textContent = isBuy ? 'Add Mock Item to Cart' : 'Post & Add to Cart';
@@ -2920,6 +3295,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
                 document.getElementById('drawerName').value = '';
                 document.getElementById('drawerQty').value = '';
                 drawerPriceInput.value = '';
+                drawerCategorySelect.value = '';
                 drawerImageInput.value = '';
                 drawerImageDataUrl = '';
                 drawerImagePreview.style.display = 'none';
@@ -2943,15 +3319,20 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
 
                 if (type === 'sell') {
                     const price = document.getElementById('drawerPrice').value;
+                    const category = drawerCategorySelect.value;
                     if (isNaN(price) || parseFloat(price) <= 0) {
                         showToast("Please enter a valid price to sell.", false);
+                        return;
+                    }
+                    if (!ALLOWED_PRODUCT_CATEGORIES.includes(category)) {
+                        showToast(translations[currentLang]['toast-error-category'], false);
                         return;
                     }
                     if (!drawerImageDataUrl) {
                         showToast(translations[currentLang]['toast-error-image'], false);
                         return;
                     }
-                    addProductListing(name, qty, price, drawerImageDataUrl);
+                    addProductListing(name, qty, price, drawerImageDataUrl, category);
                 } else {
                     const price = 100; // Default price for mock buy
                     addToCart(name, qty, price);
@@ -2961,381 +3342,5 @@ const GOOGLE_CLIENT_ID = "1007423755384-3v07pfaoaq16r6mc2dsfdtr6aiv0so40.apps.go
             });
         });
 </script>
-     <script src="https://accounts.google.com/gsi/client" async defer></script>
-</head>
-<body>
-
-    <!-- ============================================================ -->
-    <!-- LOGIN / ROLE SELECTION OVERLAY -->
-    <!-- ============================================================ -->
-    <div id="loginOverlay">
-        <div id="loginModal" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle">
-            <div class="login-brand">
-                <h1 id="loginModalTitle"><i class="fa-solid fa-seedling"></i> AGRI दुनिया</h1>
-                <p>Tell us who you are to get started</p>
-            </div>
-
-            <!-- Step 1: Choose role -->
-            <div id="roleSelectStep" class="login-step">
-                <div class="role-cards">
-                    <button type="button" class="role-card" id="chooseFarmerBtn" aria-label="Continue as Farmer">
-                        <i class="fas fa-tractor"></i>
-                        <h3>I am a Farmer</h3>
-                        <p>List your products and sell directly to buyers</p>
-                    </button>
-                    <button type="button" class="role-card" id="chooseBuyerBtn" aria-label="Continue as Buyer">
-                        <i class="fas fa-basket-shopping"></i>
-                        <h3>I am a Buyer</h3>
-                        <p>Browse and buy fresh produce from farmers</p>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Step 2a: Farmer details -->
-            <form id="farmerLoginForm" class="login-step login-form" style="display:none;">
-                <button type="button" class="back-link" id="backFromFarmerBtn"><i class="fas fa-arrow-left"></i> Back</button>
-                <h3><i class="fas fa-tractor"></i> Farmer Details</h3>
-
-                <div id="googleBtnFarmer" class="google-btn-slot"></div>
-                <div class="google-divider"><span>or enter your details</span></div>
-
-                <label for="farmerName">Your Name</label>
-                <input type="text" id="farmerName" placeholder="Enter your full name" required aria-required="true">
-
-                <label for="farmerPlace">Your Place / Village</label>
-                <input type="text" id="farmerPlace" placeholder="Enter your village or town" required aria-required="true">
-
-                <label for="farmerPhotoInput">Profile Picture (optional)</label>
-                <input type="file" id="farmerPhotoInput" accept="image/*">
-                <img id="farmerPhotoPreview" alt="Profile picture preview" style="display:none;">
-
-                <button type="submit">Continue as Farmer <i class="fas fa-arrow-right"></i></button>
-            </form>
-
-            <!-- Step 2b: Buyer details -->
-            <form id="buyerLoginForm" class="login-step login-form" style="display:none;">
-                <button type="button" class="back-link" id="backFromBuyerBtn"><i class="fas fa-arrow-left"></i> Back</button>
-                <h3><i class="fas fa-basket-shopping"></i> Buyer Details</h3>
-
-                <div id="googleBtnBuyer" class="google-btn-slot"></div>
-                <div class="google-divider"><span>or enter your details</span></div>
-
-                <label for="buyerName">Your Name</label>
-                <input type="text" id="buyerName" placeholder="Enter your full name" required aria-required="true">
-
-                <label for="buyerAddress">Your Address</label>
-                <input type="text" id="buyerAddress" placeholder="Enter your delivery address" required aria-required="true">
-
-                <button type="submit">Continue as Buyer <i class="fas fa-arrow-right"></i></button>
-            </form>
-        </div>
-    </div>
-    <!-- END LOGIN / ROLE SELECTION OVERLAY -->
-
-    <div id="mainAppTop">
-    <div id="welcome-banner">Welcome Farmer <i class="fa-solid fa-seedling"></i></div>
-
-    <header>
-        <div class="controls-panel">
-            <div class="tooltip-container farmer-only" id="notifBellContainer">
-                <button class="notif-bell-btn" id="notifBellBtn" aria-label="Notifications">
-                    <i class="fas fa-bell"></i>
-                    <span id="notifBadge" class="notif-badge" style="display:none;">0</span>
-                </button>
-                <span class="tooltip-text">Notifications</span>
-                <div id="notifDropdown" class="notif-dropdown"></div>
-            </div>
-            <div class="tooltip-container" id="profileBar">
-                <div class="profile-info">
-                    <div class="profile-avatar" id="profileAvatar"></div>
-                    <div class="profile-text">
-                        <span id="profileName"></span>
-                        <span id="profileRole"></span>
-                    </div>
-                    <button id="logoutBtn" aria-label="Logout"><i class="fas fa-right-from-bracket"></i></button>
-                </div>
-            </div>
-            <div class="tooltip-container">
-                <button class="theme-toggle" id="themeToggle" aria-label="Toggle Day-Night Theme">
-                    <i class="fas fa-moon"></i>
-                </button>
-                <span class="tooltip-text">Day/Night Mode</span>
-            </div>
-            <div class="tooltip-container">
-                <button class="lang-toggle" id="langToggle" aria-label="Switch between English and Hindi">
-                    EN/HI
-                </button>
-                <span class="tooltip-text">Translate (English/Hindi)</span>
-            </div>
-        </div>
-        <div class="header-content">
-            <h1 data-key="header-title">AGRI दुनिया</h1>
-            <p data-key="header-tagline">Empowering Farmers with Digital Access to Markets, Knowledge & Government Schemes</p>
-        </div>
-    </header>
-
-    <nav class="navbar">
-        <a href="#marketplace" class="nav-link active" data-target="marketplace" data-key="nav-market" aria-label="Go to Digital Marketplace section"><i class="fas fa-store"></i> Marketplace</a>
-        <a href="#learning" class="nav-link" data-target="learning" data-key="nav-learning" aria-label="Go to Learning Hub section"><i class="fas fa-graduation-cap"></i> Learning Hub</a>
-        <a href="#videos" class="nav-link" data-target="videos" data-key="nav-videos" aria-label="Go to Videos for Farmers section"><i class="fas fa-video"></i> Videos</a>
-        <a href="#schemes" class="nav-link" data-target="schemes" data-key="nav-schemes" aria-label="Go to Government Schemes section"><i class="fas fa-hands-helping"></i> Schemes</a>
-        <a href="#contact" class="nav-link" data-target="contact" data-key="nav-contact" aria-label="Go to Contact Us section"><i class="fas fa-envelope"></i> Contact</a>
-    </nav>
-
-    <div class="container">
-        <!-- Marketplace Section -->
-        <section id="marketplace" class="active-panel">
-            <div class="section-header">
-                <h2 data-key="sec-market-title">Digital Marketplace</h2>
-                <div class="tooltip-container">
-                    <button class="tts-button" data-content-id="marketplace" aria-label="Read this section aloud"><i class="fas fa-volume-up"></i></button>
-                    <span class="tooltip-text">Text-to-Speech</span>
-                </div>
-            </div>
-            <p data-key="sec-market-p">Buy and Sell farm products directly. Farmers can list their crops, and buyers can purchase them directly ensuring fair trade.</p>
-            <div class="card-grid">
-                <div class="market-form farmer-only">
-                    <h3 data-key="sell-title">Sell Your Products</h3>
-                    <input type="text" id="sellName" placeholder="Enter Product Name" aria-label="Product Name for sale">
-                    <input type="number" id="sellQty" placeholder="Enter Quantity (kg/units)" aria-label="Product Quantity for sale">
-                    <input type="number" id="sellPrice" placeholder="Enter Price (₹)" aria-label="Product Price">
-                    <label for="sellImage" class="sell-image-label" data-key="sell-image-label">Add a Photo of the Vegetable (required) 📷</label>
-                    <input type="file" id="sellImage" accept="image/*" aria-label="Upload or capture a photo of the product">
-                    <img id="sellImagePreview" class="product-image-preview" alt="Product photo preview" style="display:none;">
-                    <button id="postForSaleBtn" data-key="sell-button">Post for Sale</button>
-                </div>
-                <!-- AI Product Listing part will be here gyus -->
-                <div class="market-form farmer-only" id="listingGenerator">
-                    <h3 data-key="generate-title">Generate Product Listing ✨</h3>
-                    <input type="text" id="listingProductName" placeholder="e.g., Organic Corn" aria-label="Product Name for listing">
-                    <input type="text" id="listingKeyPoints" placeholder="e.g., Hand-picked, non-GMO, high protein" aria-label="Key selling points">
-                    <button id="generateListingBtn" data-key="generate-button">Generate Description ✨</button>
-                    <div id="listingOutput" style="margin-top: 15px; padding: 10px; border: 1px dashed var(--color-card-border); border-radius: 4px; background: var(--color-background); min-height: 50px; text-align: left; font-size: 0.9em;">
-                        <p data-key="listing-placeholder">Your professional product description will appear here.</p>
-                    </div>
-                </div>
-            </div>
-
-            <!--  QUICK BUY/SELL BUTTONS will be here -->
-            <div style="text-align: center; margin-top: 30px;">
-                <button id="openQuickSell" class="farmer-only" style="background: var(--color-secondary); color: white; padding: 10px 20px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-right: 10px; transition: transform 0.2s;">
-                    <i class="fas fa-arrow-up"></i> Quick Sell
-                </button>
-                <button id="openQuickBuy" class="buyer-only" style="background: var(--color-accent); color: var(--color-text); padding: 10px 20px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: transform 0.2s;">
-                    <i class="fas fa-shopping-basket"></i> Quick Buy
-                </button>
-            </div>
-            <!-- END  QUICK BUY/SELL BUTTONS will be -->
-
-            <!-- FARMER: My Product Listings -->
-            <div id="myListingsSection" class="farmer-only listings-panel">
-                <h2><i class="fas fa-list"></i> My Product Listings</h2>
-                <div id="myListingsItems"><p>You haven't listed any products yet.</p></div>
-            </div>
-
-            <!-- BUYER: Available Products from Farmers -->
-            <div id="availableProductsSection" class="buyer-only listings-panel">
-                <h2><i class="fas fa-store"></i> Products Available to Buy</h2>
-                <div id="availableProductsItems"><p>No products listed yet. Check back soon!</p></div>
-            </div>
-
-            <div id="cartSection" style="margin-top:30px; padding:20px; border-radius:8px;">
-                <h2 data-key="cart-title">Your Cart</h2>
-                <div id="cartItems"><p data-key="cart-empty">Your cart is empty.</p></div>
-            </div>
-        </section>
-
-        <!-- Learning Hub Section fr -->
-        <section id="learning">
-            <div class="section-header">
-                <h2 data-key="sec-learning-title">Learning Hub</h2>
-                <div class="tooltip-container">
-                    <button class="tts-button" data-content-id="learning" aria-label="Read this section aloud"><i class="fas fa-volume-up"></i></button>
-                    <span class="tooltip-text">Text-to-Speech</span>
-                </div>
-            </div>
-            <p data-key="sec-learning-p">Learn modern farming techniques, productivity improvement, and crop management through our platform.</p>
-
-            <div class="card-grid">
-                <div class="learning-card" data-topic="irrigation" tabindex="0" role="button" aria-label="Open easy guide: Modern Irrigation Techniques">
-                    <i class="fas fa-water"></i>
-                    <h4 data-key="course-1-title">Modern Irrigation Techniques</h4>
-                    <p data-key="course-1-desc">Optimize water usage with drip and sprinkler systems. Learn smart water management.</p>
-                    <span class="tap-hint" data-key="tap-hint">👉 Tap to see easy guide</span>
-                </div>
-                <div class="learning-card" data-topic="organic" tabindex="0" role="button" aria-label="Open easy guide: Organic Farming">
-                    <i class="fas fa-leaf"></i>
-                    <h4 data-key="course-2-title">Organic Farming</h4>
-                    <p data-key="course-2-desc">Master the techniques of natural, chemical-free cultivation and soil enrichment.</p>
-                    <span class="tap-hint" data-key="tap-hint">👉 Tap to see easy guide</span>
-                </div>
-                <div class="learning-card" data-topic="insurance" tabindex="0" role="button" aria-label="Open easy guide: Crop Insurance Awareness">
-                    <i class="fas fa-chart-line"></i>
-                    <h4 data-key="course-3-title">Crop Insurance Awareness</h4>
-                    <p data-key="course-3-desc">Understand policy details and claims process for securing your harvest against risks.</p>
-                    <span class="tap-hint" data-key="tap-hint">👉 Tap to see easy guide</span>
-                </div>
-                <div class="learning-card" data-topic="cloud" tabindex="0" role="button" aria-label="Open easy guide: Cloud Integration and e-Learning">
-                    <i class="fas fa-cloud"></i>
-                    <h4 data-key="course-4-title">Cloud Integration & e-Learning</h4>
-                    <p data-key="course-4-desc">Utilize cloud tools for data management and access to digital agricultural resources.</p>
-                    <span class="tap-hint" data-key="tap-hint">👉 Tap to see easy guide</span>
-                </div>
-            </div>
-
-            <div id="ai-recommendation">
-                <i class="fas fa-robot fa-2x"></i>
-                <h3 data-key="ai-chat-title">✨ Agri-Gemini: Instant Crop Advisor</h3>
-                <p data-key="ai-desc" style="margin-bottom: 20px;">Ask me anything about farming techniques, market trends, or pest management!</p>
-                
-                <div id="agriChatContainer" style="text-align: center;">
-                    <div id="chatHistory" style="text-align: left; padding: 10px; min-height: 200px; max-height: 300px; overflow-y: auto; background: var(--color-background); border-radius: 8px; border: 1px solid var(--color-card-border);">
-                        <div class="chat-message ai"><div class="message-bubble">Hello! I'm Agri-Gemini, your AI crop expert. Ask me anything about farming techniques, pests, or market advice.</div></div>
-                    </div>
-                    <input type="text" id="chatInput" placeholder="Ask your question here..." style="width: 100%; padding: 12px; margin-top: 15px; border-radius: 6px; border: 1px solid var(--color-card-border); background: var(--color-card-bg); color: var(--color-text);">
-                    <button id="sendChatBtn" style="margin-top: 10px; padding: 12px; width: 100%; background: var(--color-accent); color: var(--color-text); font-weight: 700; border: none; border-radius: 6px; transition: background 0.3s;">
-                        Get Advice ✨
-                    </button>
-                    <audio id="ttsAudio" style="display: none;"></audio>
-                </div>
-            </div>
-        </section>
-
-        <!-- Videos Section -->
-        <section id="videos">
-            <div class="section-header">
-                <h2 data-key="sec-video-title">Videos for Farmers</h2>
-                <div class="tooltip-container">
-                    <button class="tts-button" data-content-id="videos" aria-label="Read this section aloud"><i class="fas fa-volume-up"></i></button>
-                    <span class="tooltip-text">Text-to-Speech</span>
-                </div>
-            </div>
-            <p data-key="sec-video-p">Watch these helpful videos on crop cultivation, soil health, and modern farming practices.</p>
-            <div class="video-container">
-                <div class="video-wrapper">
-                    <iframe src="https://www.youtube.com/embed/B5ffwYfJv5w" title="Video 1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-                </div>
-                <div class="video-wrapper">
-                    <iframe src="https://www.youtube.com/embed/bNIafzHT_Go" title="Video 2" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-                </div>
-                <div class="video-wrapper">
-                    <iframe src="https://www.youtube.com/embed/lbzJiVDnL_k" title="Video 3" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-                </div>
-            </div>
-        </section>
-
-        <!-- Schemes Section should be  -->
-        <section id="schemes">
-            <div class="section-header">
-                <h2 data-key="sec-scheme-title">Government Schemes for Farmers</h2>
-                <div class="tooltip-container">
-                    <!-- Updated TTS button to reflect use of Gemini API for Schemes -->
-                    <button class="tts-button" data-content-id="schemes" aria-label="Read this section aloud"><i class="fas fa-volume-up"></i></button>
-                    <span class="tooltip-text">Text-to-Speech (High Quality)</span>
-                </div>
-            </div>
-            <p data-key="sec-scheme-p">Here are some important government schemes designed to support farmers. Click on the links to learn more and apply:</p>
-            <ul class="scheme-list">
-                <li data-key="scheme-1-desc"><a href="https://pmkisan.gov.in/" target="_blank">Pradhan Mantri Kisan Samman Nidhi (PM-KISAN)</a> – Direct income support of ₹6,000 annually to farmers.</li>
-                <li data-key="scheme-2-desc"><a href="https://pmfby.gov.in/" target="_blank">Pradhan Mantri Fasal Bima Yojana (PMFBY)</a> – Crop insurance for farmers against natural calamities.</li>
-                <li data-key="scheme-3-desc"><a href="https://soilhealth.dac.gov.in/" target="_blank">Soil Health Card Scheme</a> – Provides farmers with soil health reports and recommendations.</li>
-                <li data-key="scheme-4-desc"><a href="https://agriinfra.dac.gov.in/" target="_blank">Agriculture Infrastructure Fund (AIF)</a> – Financial support for developing agricultural infrastructure.</li>
-                <li data-key="scheme-5-desc"><a href="https://www.enam.gov.in/web/" target="_blank">National Agriculture Market (eNAM)</a> – Online trading platform for farmers to sell their produce.</li>
-            </ul>
-        </section>
-
-        <!-- Contact Section 
-         i should also add better gmail id -->
-        <section id="contact">
-            <div class="section-header">
-                <h2 data-key="sec-contact-title">Contact Us</h2>
-                <div class="tooltip-container">
-                    <button class="tts-button" data-content-id="contact" aria-label="Read this section aloud"><i class="fas fa-volume-up"></i></button>
-                    <span class="tooltip-text">Text-to-Speech</span>
-                </div>
-            </div>
-            <p data-key="contact-info-1">Email:thinkgridquiz@gmail.com</p>
-            <p data-key="contact-info-2">Helpline: +91 7393953233</p>
-            
-            <form class="contact-form" id="contactForm" aria-label="Contact Form">
-                <label for="contactName" data-key="form-label-name">Name</label>
-                <input type="text" id="contactName" name="name" required aria-required="true" aria-label="Your Name">
-                
-                <label for="contactEmail" data-key="form-label-email">Email</label>
-                <input type="email" id="contactEmail" name="email" required aria-required="true" aria-label="Your Email">
-                
-                <label for="contactMessage" data-key="form-label-message">Message</label>
-                <textarea id="contactMessage" name="message" rows="5" required aria-required="true" aria-label="Your Message"></textarea>
-                
-                <button type="submit" data-key="form-button-send">Send Message</button>
-            </form>
-        </section>
-    </div>
-    </div>
-    <!-- END mainAppTop -->
-
-    <div id="toast-message"></div>
-
-    <!-- NEW DRAWER/MODAL STRUCTURE -->
-    <div id="drawerOverlay" onclick="closeDrawer()"></div>
-    <div id="buySellDrawer">
-        <button class="close-button" onclick="closeDrawer()"><i class="fas fa-times"></i></button>
-        <h3 id="drawerTitle"></h3>
-        <p id="drawerInstruction"></p>
-        
-        <div class="market-form" style="background: var(--color-card-bg); box-shadow: none;">
-            <input type="text" id="drawerName" placeholder="Product Name" aria-label="Product Name">
-            <input type="number" id="drawerQty" placeholder="Quantity (kg/units)" aria-label="Quantity">
-            <input type="number" id="drawerPrice" placeholder="Price (₹)" aria-label="Price" style="display: none;">
-            <label for="drawerImage" id="drawerImageLabel" class="sell-image-label" style="display: none;">Add a Photo of the Vegetable (required) 📷</label>
-            <input type="file" id="drawerImage" accept="image/*" aria-label="Upload or capture a photo of the product" style="display: none;">
-            <img id="drawerImagePreview" class="product-image-preview" alt="Product photo preview" style="display:none;">
-            <button id="drawerActionBtn" class="market-form-button">Add to Cart</button>
-        </div>
-
-        <p style="margin-top: 20px; font-size: 0.8em; color: var(--color-text);">
-            Note: This quick panel is for demonstration. All items are added to your local cart.
-        </p>
-    </div>
-    <!-- END NEW DRAWER/MODAL STRUCTURE -->
-
-    <!-- EASY LEARNING GUIDE MODAL - looks like a hand-made notebook page -->
-    <div id="techniqueOverlay" onclick="closeTechniqueModal()"></div>
-    <div id="techniqueModal" role="dialog" aria-modal="true" aria-labelledby="techniqueModalTitle">
-        <div class="pin" aria-hidden="true"></div>
-        <div class="tape tape-left" aria-hidden="true"></div>
-        <div class="tape tape-right" aria-hidden="true"></div>
-        <button class="close-button" onclick="closeTechniqueModal()" aria-label="Close guide"><i class="fas fa-times"></i></button>
-
-        <div class="technique-header">
-            <span id="techniqueEmoji" class="technique-emoji">🌱</span>
-            <h3 id="techniqueModalTitle"></h3>
-        </div>
-
-        <button id="techniqueListenBtn" class="listen-btn" aria-label="Listen to this guide">
-            <i class="fas fa-volume-up"></i> <span id="listenLabel" data-key="listen-label">Listen</span>
-        </button>
-
-        <div id="techniqueDiagram" class="technique-diagram"></div>
-
-        <div class="technique-steps-label" data-key="steps-label">✍️ Steps to follow:</div>
-        <div id="techniqueSteps" class="technique-steps"></div>
-
-        <div id="techniqueTip" class="technique-tip"></div>
-    </div>
-    <!-- END EASY LEARNING GUIDE MODAL -->
-
-
-    <div id="mainAppFooter">
-    <footer>
-        <div class="visitor-counter" data-key="footer-visits">
-            <span id="personalVisitorText"></span> 
-            <span id="visitorCount" class="personal-visits-glow">0</span>
-            <span id="globalVisitorText" style="display: block; font-size: 0.7em; margin-top: 5px;"></span>
-        </div>
-        <p data-key="footer-copyright">2025 Digital Marketplace & Learning Platform for Farmers | All Rights Reserved</p>
-    </footer>
-    </div>
-
 </body>
 </html>
