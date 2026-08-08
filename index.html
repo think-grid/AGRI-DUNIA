@@ -160,6 +160,8 @@
                     <input type="text" id="sellName" placeholder="Enter Product Name" aria-label="Product Name for sale">
                     <input type="number" id="sellQty" placeholder="Enter Quantity (kg/units)" aria-label="Product Quantity for sale">
                     <input type="number" id="sellPrice" placeholder="Enter Price (₹)" aria-label="Product Price">
+                    <label for="sellDescription" class="sell-image-label">Description (optional)</label>
+                    <textarea id="sellDescription" rows="2" placeholder="Describe your product — freshness, variety, harvest date, etc." aria-label="Product description"></textarea>
                     <label for="sellImage" class="sell-image-label" data-key="sell-image-label">Add a Photo of the Product (required) 📷</label>
                     <input type="file" id="sellImage" accept="image/*" aria-label="Upload or capture a photo of the product">
                     <img id="sellImagePreview" class="product-image-preview" alt="Product photo preview" style="display:none;">
@@ -376,6 +378,8 @@
             <input type="text" id="drawerName" placeholder="Product Name" aria-label="Product Name">
             <input type="number" id="drawerQty" placeholder="Quantity (kg/units)" aria-label="Quantity">
             <input type="number" id="drawerPrice" placeholder="Price (₹)" aria-label="Price" style="display: none;">
+            <label for="drawerDescription" id="drawerDescriptionLabel" class="sell-image-label" style="display: none;">Description (optional)</label>
+            <textarea id="drawerDescription" rows="2" placeholder="Describe your product (optional)" aria-label="Product description" style="display: none;"></textarea>
             <label for="drawerImage" id="drawerImageLabel" class="sell-image-label" style="display: none;">Add a Photo of the Product (required) 📷</label>
             <input type="file" id="drawerImage" accept="image/*" aria-label="Upload or capture a photo of the product" style="display: none;">
             <img id="drawerImagePreview" class="product-image-preview" alt="Product photo preview" style="display:none;">
