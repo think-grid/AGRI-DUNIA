@@ -522,6 +522,14 @@
             font-size: 0.9em;
         }
 
+        /* farmer-written blurb on a listing (irrigation notes, variety, harvest date, etc.) */
+        .product-description {
+            font-size: 0.85em;
+            color: var(--color-text);
+            opacity: 0.8;
+            margin: 4px 0;
+        }
+
         /* BUYER PURCHASES — reviews & farmer messages */
         .purchase-item {
             display: flex;
