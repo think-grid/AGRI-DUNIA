@@ -269,6 +269,21 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             const profileRoleEl = document.getElementById('profileRole');
             const logoutBtn = document.getElementById('logoutBtn');
             const welcomeBannerEl = document.getElementById('welcome-banner');
+            const profileBar = document.getElementById('profileBar');
+            const profileAvatarBtn = document.getElementById('profileAvatarBtn');
+            const profileDropdown = document.getElementById('profileDropdown');
+
+            if (profileAvatarBtn) {
+                profileAvatarBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    profileDropdown.classList.toggle('open');
+                });
+                document.addEventListener('click', (e) => {
+                    if (!profileBar.contains(e.target)) {
+                        profileDropdown.classList.remove('open');
+                    }
+                });
+            }
 
             let farmerPhotoDataUrl = '';
             let currentUser = null;
