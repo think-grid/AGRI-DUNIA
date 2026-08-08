@@ -1,56 +1,44 @@
-/* =====================================================================
-   GEMINI CHAT / TTS — via Firebase Cloud Function proxy
-   -------------------------------------------------------------------
-   The Gemini API key is NOT stored in this file — it lives server-side
-   as a Firebase secret (see functions/index.js). This file only calls
-   your deployed Cloud Function URLs, which forward the request to
-   Gemini using the hidden key.
-
-   After running `firebase deploy --only functions`, Firebase prints
-   two URLs (one per function). Paste them below.
-   Example: https://us-central1-agri-dunia.cloudfunctions.net/geminiChat
-   ===================================================================== */
+// gemini key stays server side (firebase cloud function), this file just hits these urls
 const CHAT_PROXY_URL = "https://us-central1-agri-dunia.cloudfunctions.net/geminiChat";
 const TTS_PROXY_URL = "https://us-central1-agri-dunia.cloudfunctions.net/geminiTts";
 
-/* =====================================================================
-   GOOGLE SIGN-IN SETUP
-   -------------------------------------------------------------------
-   To turn on "Continue with Google":
-   1. Go to https://console.cloud.google.com/apis/credentials
-   2. Create an OAuth 2.0 Client ID (type: "Web application")
-   3. Under "Authorized JavaScript origins", add the exact URL(s) this
-      site will be served from (e.g. https://your-site.com — no
-      trailing slash; add http://localhost:PORT too if testing locally)
-   4. Paste the Client ID below, replacing the placeholder.
-   Until a real Client ID is set, the Google buttons stay hidden and
-   the rest of the login flow (name/place/address) works as before.
-   ===================================================================== */
+// google sign-in client id, get one from google cloud console if this needs changing
 const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.googleusercontent.com";
 
-
-        
+        // Cloud Functions occasionally 429 under load; retry with jittered exponential
+        // backoff instead of failing the chat/TTS request outright.
         async function fetchWithBackoff(url, options, maxRetries = 3) {
             for (let i = 0; i < maxRetries; i++) {
                 try {
                     const response = await fetch(url, options);
-                    if (response.status !== 429 && response.ok) {
+                    if (response.ok) {
                         return response;
-                    } else if (response.status === 429 || !response.ok) {
-                        // Rate limit or other error, retry with backoff
-                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                    } else {
+                    }
+                    if (i === maxRetries - 1) {
                         throw new Error(`API call failed with status: ${response.status}`);
                     }
+                    const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
                 } catch (error) {
                     if (i === maxRetries - 1) throw error;
-                    // Wait before retrying
                     const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
                     await new Promise(resolve => setTimeout(resolve, delay));
                 }
             }
             throw new Error("API call failed after maximum retries");
+        }
+
+        // Product names, review comments, chat messages etc. all end up in innerHTML
+        // somewhere (Firestore data is just as untrusted as any other user input), so
+        // anything that isn't a hardcoded string needs to go through this first.
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
 
         function base64ToArrayBuffer(base64) {
@@ -109,10 +97,10 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             const messageDiv = document.createElement("div");
             messageDiv.className = `chat-message ${role}`;
 
-            let content = text;
+            let content = escapeHtml(text);
             if (sources.length > 0) {
-                const sourceLinks = sources.map((s, i) => 
-                    `<a href="${s.uri}" target="_blank" rel="noopener noreferrer" title="${s.title || 'Source'}"> [${i+1}]</a>`
+                const sourceLinks = sources.map((s, i) =>
+                    `<a href="${escapeHtml(s.uri)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(s.title || 'Source')}"> [${i+1}]</a>`
                 ).join('');
                 content += `<p style="font-size: 0.75em; margin-top: 5px; opacity: 0.7;">Sources: ${sourceLinks}</p>`;
             }
@@ -184,7 +172,6 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
         }
         
 
-        // JAVASCRIPT LOGIC should be d
         document.addEventListener("DOMContentLoaded", function () {
             
             
@@ -203,22 +190,12 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 }, 3500);
             }
 
-            /* ===================================================== */
-            /* AUTH / LOGIN SYSTEM — Farmer vs Buyer                 */
-            /* ===================================================== */
+            // auth / login stuff (farmer vs buyer)
             const AUTH_STORAGE_KEY = 'agriUserProfile';
-            // NOTE: farmer purchase notifications used to be tracked here via
-            // NOTIF_STORAGE_KEY (localStorage), but that only worked on the same
-            // device/browser the purchase happened on. They now live in Firestore
-            // ("farmerNotifications" collection, see firebase.js) so they sync
-            // across every device.
-            // Declared early so functions that read it (e.g. renderNotifications, called from
-            // initAuth on page load) never run before it's initialized.
+            // notifications moved from localStorage to firestore so they sync across devices now
             let currentLang = 'en';
 
-            /* ===================================================== */
-            /* LANGUAGE CONFIG — English, Hindi, Tamil, Telugu, Bengali */
-            /* ===================================================== */
+            // language config
             const SUPPORTED_LANGS = ['en', 'hi', 'ta', 'te', 'bn'];
             const LANG_LABELS = { en: 'English', hi: 'हिन्दी', ta: 'தமிழ்', te: 'తెలుగు', bn: 'বাংলা' };
             const INITIAL_CHAT_TEXT = {
@@ -325,11 +302,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             function applyRoleVisibility(role) {
                 document.body.classList.remove('role-farmer', 'role-buyer');
                 document.body.classList.add(role === 'farmer' ? 'role-farmer' : 'role-buyer');
-                // The set of visible nav pills just changed (farmer-only/buyer-only
-                // pills toggled) — re-measure the wheel so centering stays correct.
-                // Deferred: on first load this can run before setupNavWheel() has
-                // executed yet, so the existence check happens inside the timeout,
-                // not before scheduling it.
+                // nav pills visibility changed, re-measure wheel centering (delayed since setupNavWheel might not exist yet)
                 setTimeout(() => {
                     if (typeof window.__resizeNavWheel === 'function') window.__resizeNavWheel();
                 }, 0);
@@ -341,10 +314,10 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
 
             function updateWelcomeAndProfile(user) {
                 if (user.role === 'farmer') {
-                    welcomeBannerEl.innerHTML = `Welcome Farmer ${user.name} <i class="fa-solid fa-seedling"></i>`;
+                    welcomeBannerEl.innerHTML = `Welcome Farmer ${escapeHtml(user.name)} <i class="fa-solid fa-seedling"></i>`;
                     profileRoleEl.textContent = 'Farmer' + (user.place ? ' · ' + user.place : '');
                 } else {
-                    welcomeBannerEl.innerHTML = `Welcome ${user.name} <i class="fa-solid fa-basket-shopping"></i>`;
+                    welcomeBannerEl.innerHTML = `Welcome ${escapeHtml(user.name)} <i class="fa-solid fa-basket-shopping"></i>`;
                     profileRoleEl.textContent = 'Buyer';
                 }
                 profileNameEl.textContent = user.name;
@@ -438,16 +411,13 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                         console.error('Could not parse saved profile', e);
                     }
                 }
-                // Not logged in yet — keep the login overlay up and lock background scroll
+                // not logged in, keep overlay up and lock scroll
                 document.body.style.overflow = 'hidden';
             }
 
             initAuth();
-            /* ================= END AUTH / LOGIN SYSTEM ================= */
 
-            /* ===================================================== */
-            /* GOOGLE SIGN-IN — "Continue with Google" on login forms */
-            /* ===================================================== */
+            // "continue with google" on login forms
             const googleBtnFarmer = document.getElementById('googleBtnFarmer');
             const googleBtnBuyer = document.getElementById('googleBtnBuyer');
 
@@ -492,8 +462,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
 
             function initGoogleSignIn(attemptsLeft = 20) {
                 if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID.indexOf('YOUR_GOOGLE_CLIENT_ID') !== -1) {
-                    // No real Client ID configured yet — leave the slots empty.
-                    // (CSS hides the "or continue with Google" divider automatically.)
+                    // no client id set, leave slots empty (css hides the divider)
                     return;
                 }
                 if (typeof google === 'undefined' || !google.accounts || !google.accounts.id) {
@@ -519,34 +488,17 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             }
 
             initGoogleSignIn();
-            /* ================= END GOOGLE SIGN-IN ================= */
 
-            /* ===================================================== */
-            /* PRODUCT LISTINGS — Farmer lists, Buyer browses/buys   */
-            /* ===================================================== */
-            // Product listings now live in Firestore (see firebase.js) so every
-            // account/device sees the same marketplace in real time, instead of
-            // each browser only seeing what it itself saved to localStorage.
+            // product listings live in firestore now so every device sees the same marketplace
             function loadProductListings() {
                 return window.__agriLatestProducts || [];
             }
 
-            // Whenever Firestore's live listener gets new data (a listing added,
-            // removed, or bought — from ANY account, ANY device), re-render.
             window.onProductsUpdated = function () {
                 renderProductListings();
             };
 
-            // Compress an image file down to a data URL small enough to store in a
-            // Firestore document (1 MB limit per doc). Raw camera photos can be
-            // several MB, which would otherwise make fbAddProduct() silently fail.
-            // Firestore rejects any document over ~1 MiB total. A single compression
-            // pass isn't always enough (a busy/detailed photo can still encode large
-            // at quality 0.7), and that was silently blowing past the limit, causing
-            // fbAddProduct() to reject with "invalid-argument" — which the caller
-            // then reported as a generic "check your connection" error, hiding the
-            // real cause. This now shrinks in a loop until the result is safely
-            // under Firestore's cap, or gives up with a clear, honest error.
+            // compress image to fit under firestore's 1mb doc limit, camera photos can be huge
             const MAX_IMAGE_DATA_URL_BYTES = 700 * 1024; // leave headroom for other fields
 
             function compressImageFile(file, maxDim = 800, quality = 0.7) {
@@ -575,8 +527,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                             let q = quality;
                             let dataUrl = attempt(dim, q);
                             let tries = 0;
-                            // Shrink dimensions and quality together until it fits,
-                            // or we've tried enough times to know it never will.
+                            // keep shrinking until it fits or we give up
                             while (dataUrl.length > MAX_IMAGE_DATA_URL_BYTES && tries < 6) {
                                 dim = Math.round(dim * 0.75);
                                 q = Math.max(0.4, q - 0.1);
@@ -598,7 +549,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 });
             }
 
-            // Farmers may only list products under these fixed categories.
+            // farmers can only pick from these categories
             const ALLOWED_PRODUCT_CATEGORIES = ['Vegetables', 'Fruits', 'Seeds', 'Tools'];
             const CATEGORY_ICONS = {
                 'Vegetables': '🥦',
@@ -607,12 +558,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 'Tools': '🛠️'
             };
 
-            // Shared "why did this Firestore write fail" translator. A bare
-            // "permission-denied" almost always means the security rules simply
-            // don't have an allow rule for that collection yet (very likely right
-            // now for productReviews/buyerFarmerMessages/farmerNotifications,
-            // which are newer than the rules were last written) — surfacing that
-            // distinctly saves guessing "is this a network problem?" every time.
+            // turns firestore error codes into something readable instead of generic "check connection"
             function describeFirestoreWriteError(err, fallback) {
                 if (err && err.code === 'permission-denied') {
                     return `Could not save: the database is not accepting writes for this yet (permission denied). This means Firestore's security rules need a rule added for this collection — it's a configuration issue, not your connection.`;
@@ -736,11 +682,12 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     } else {
                         myListingsItems.innerHTML = mine.map(p => {
                             const rating = getProductRating(p.id);
+                            const name = escapeHtml(p.name);
                             return `
                             <div class="listing-item">
                                 <div class="listing-item-content">
-                                    ${p.image ? `<img src="${p.image}" alt="${p.name}" class="listing-item-thumb">` : ''}
-                                    <span>${p.category ? `<span class="category-badge">${CATEGORY_ICONS[p.category] || ''} ${p.category}</span>` : ''}<strong>${p.name}</strong> — ${p.qty > 0 ? `${p.qty} units left` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}
+                                    ${p.image ? `<img src="${p.image}" alt="${name}" class="listing-item-thumb">` : ''}
+                                    <span>${p.category ? `<span class="category-badge">${CATEGORY_ICONS[p.category] || ''} ${escapeHtml(p.category)}</span>` : ''}<strong>${name}</strong> — ${p.qty > 0 ? `${p.qty} units left` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}
                                     ${rating ? `<br><span class="rating-badge">${starsHtml(rating.avg)} ${rating.avg.toFixed(1)} (${rating.count})</span>` : ''}</span>
                                 </div>
                                 <button class="remove-btn" onclick="removeProductListing('${p.id}')"><i class="fas fa-trash-alt"></i> Remove</button>
@@ -757,13 +704,16 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     } else {
                         availableProductsItems.innerHTML = products.map(p => {
                             const rating = getProductRating(p.id);
+                            const name = escapeHtml(p.name);
+                            const farmerName = escapeHtml(p.farmerName);
+                            const farmerPlace = escapeHtml(p.farmerPlace);
                             return `
                             <div class="listing-item">
                                 <div class="listing-item-content">
-                                    ${p.image ? `<img src="${p.image}" alt="${p.name}" class="listing-item-thumb">` : ''}
-                                    <span>${p.category ? `<span class="category-badge">${CATEGORY_ICONS[p.category] || ''} ${p.category}</span>` : ''}<strong>${p.name}</strong> — ${p.qty > 0 ? `${p.qty} units available` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}<br>
+                                    ${p.image ? `<img src="${p.image}" alt="${name}" class="listing-item-thumb">` : ''}
+                                    <span>${p.category ? `<span class="category-badge">${CATEGORY_ICONS[p.category] || ''} ${escapeHtml(p.category)}</span>` : ''}<strong>${name}</strong> — ${p.qty > 0 ? `${p.qty} units available` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}<br>
                                     ${rating ? `<span class="rating-badge">${starsHtml(rating.avg)} ${rating.avg.toFixed(1)} (${rating.count})</span><br>` : ''}
-                                    <small>Sold by ${p.farmerName}${p.farmerPlace ? ', ' + p.farmerPlace : ''}</small></span>
+                                    <small>Sold by ${farmerName}${p.farmerPlace ? ', ' + farmerPlace : ''}</small></span>
                                 </div>
                                 ${p.qty > 0 ? `
                                 <div class="buy-controls" style="display:flex;align-items:center;gap:8px;">
@@ -776,11 +726,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     }
                 }
             }
-            /* ================= END PRODUCT LISTINGS ================= */
 
-            /* ===================================================== */
-            /* FARMER NOTIFICATIONS — alert when a buyer buys         */
-            /* ===================================================== */
+            // notify farmer bell icon when a buyer buys something
             const notifBellContainer = document.getElementById('notifBellContainer');
             const notifBellBtn = document.getElementById('notifBellBtn');
             const notifBadge = document.getElementById('notifBadge');
@@ -823,7 +770,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 } else {
                     notifDropdown.innerHTML = mine.map(n => `
                         <div class="notif-item ${n.read ? '' : 'unread'}">
-                            ${n[currentLang] || n.en}
+                            ${escapeHtml(n[currentLang] || n.en)}
                             <span class="notif-time">${timeAgo(n.createdAt)}</span>
                         </div>
                     `).join('');
@@ -841,9 +788,6 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 }
             }
 
-            // Firestore listener fires this on every notification change — new
-            // purchase, or a read-state update — from ANY device the farmer (or a
-            // buyer buying from them) is using.
             window.onNotificationsUpdated = function () {
                 renderNotifications();
             };
@@ -867,15 +811,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     }
                 });
             }
-            /* ================= END FARMER NOTIFICATIONS ================= */
 
-            /* ===================================================== */
-            /* BUYER PURCHASES — review a product / message the farmer */
-            /* ===================================================== */
-            // Purchase records are kept locally per-buyer (same pattern as farmer
-            // notifications above) since they're just "what did *I* buy" — the
-            // review and message content itself is what needs to sync to the
-            // farmer, and that goes through Firestore (fbAddReview / fbAddMessage).
+            // buyer's own purchase history stays local, reviews/messages sync via firestore
             const PURCHASE_STORAGE_KEY = 'agriBuyerPurchases';
 
             function loadPurchases() {
@@ -906,8 +843,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 savePurchases(all);
             }
 
-            // Tracks which purchase currently has an open review/message form so a
-            // background Firestore snapshot doesn't wipe out text mid-typing.
+            // keeps track of which review/message form is open so a firestore update doesn't wipe it mid-typing
             let openPurchaseForm = null;
 
             function getProductRating(productId) {
@@ -948,13 +884,15 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
 
                     const reviewOpen = openPurchaseForm === `review-${p.id}`;
                     const msgOpen = openPurchaseForm === `message-${p.id}`;
+                    const productName = escapeHtml(p.name);
+                    const farmerName = escapeHtml(p.farmerName);
 
                     return `
                         <div class="purchase-item">
                             <div class="listing-item-content">
                                 <span>
-                                    <strong>${p.name}</strong> — ${p.qty} units × ₹${p.price.toFixed(2)}<br>
-                                    <small>Bought from ${p.farmerName} · ${timeAgo(p.time)}</small>
+                                    <strong>${productName}</strong> — ${p.qty} units × ₹${p.price.toFixed(2)}<br>
+                                    <small>Bought from ${farmerName} · ${timeAgo(p.time)}</small>
                                 </span>
                             </div>
 
@@ -966,7 +904,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                             ${existingReview && !reviewOpen ? `
                                 <div class="review-readonly">
                                     <span class="star-rating-display">${starsHtml(existingReview.rating)}</span>
-                                    ${existingReview.comment ? `<p>${existingReview.comment}</p>` : ''}
+                                    ${existingReview.comment ? `<p>${escapeHtml(existingReview.comment)}</p>` : ''}
                                 </div>
                             ` : ''}
 
@@ -974,17 +912,17 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                                 <div class="star-rating" id="starRating-${p.id}" data-value="${existingReview ? existingReview.rating : 0}">
                                     ${[1,2,3,4,5].map(n => `<i class="${existingReview && n <= existingReview.rating ? 'fas' : 'far'} fa-star" onclick="setReviewRating('${p.id}', ${n})"></i>`).join('')}
                                 </div>
-                                <textarea id="reviewComment-${p.id}" rows="2" placeholder="What did you think of this product? (optional)">${existingReview ? (existingReview.comment || '') : ''}</textarea>
+                                <textarea id="reviewComment-${p.id}" rows="2" placeholder="What did you think of this product? (optional)">${existingReview ? escapeHtml(existingReview.comment || '') : ''}</textarea>
                                 <button onclick="submitReview('${p.id}')">Submit Review</button>
                             </div>
 
                             <div class="message-panel" style="display:${msgOpen ? 'block' : 'none'};">
                                 ${threadMessages.length > 0 ? `
                                     <div class="message-thread">
-                                        ${threadMessages.map(m => `<div class="message-bubble-buyer">${m.text}<span class="message-time">${timeAgo(m.createdAt)}</span></div>`).join('')}
+                                        ${threadMessages.map(m => `<div class="message-bubble-buyer">${escapeHtml(m.text)}<span class="message-time">${timeAgo(m.createdAt)}</span></div>`).join('')}
                                     </div>
                                 ` : ''}
-                                <textarea id="messageText-${p.id}" rows="2" placeholder="Ask ${p.farmerName} a question about your order..."></textarea>
+                                <textarea id="messageText-${p.id}" rows="2" placeholder="Ask ${farmerName} a question about your order..."></textarea>
                                 <button onclick="submitMessage('${p.id}')">Send Message</button>
                             </div>
                         </div>
@@ -1101,16 +1039,14 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 container.innerHTML = mine.map(m => `
                     <div class="farmer-message-item">
                         <div>
-                            <strong>${m.buyerName}</strong> ${m.productName ? `<span class="category-badge">about ${m.productName}</span>` : ''}
+                            <strong>${escapeHtml(m.buyerName)}</strong> ${m.productName ? `<span class="category-badge">about ${escapeHtml(m.productName)}</span>` : ''}
                             <span class="message-time">${timeAgo(m.createdAt)}</span>
                         </div>
-                        <p>${m.text}</p>
+                        <p>${escapeHtml(m.text)}</p>
                     </div>
                 `).join('');
             }
 
-            // Both listeners are wired here (in addition to onProductsUpdated above)
-            // so reviews/messages update live across devices, same as listings.
             window.onReviewsUpdated = function () {
                 renderProductListings();
                 if (!openPurchaseForm) renderPurchases();
@@ -1119,8 +1055,6 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 renderFarmerMessages();
                 if (!openPurchaseForm) renderPurchases();
             };
-            /* ================= END BUYER PURCHASES ================= */
-
 
             let cart = []; 
 
@@ -1140,7 +1074,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     html += `
                         <div style="padding:10px;margin:5px 0;display:flex;justify-content:space-between;align-items:center;">
                             <span>
-                                <strong>${item.name}</strong> — ${item.qty} units × ₹${item.price.toFixed(2)} = ₹${subtotal.toFixed(2)}
+                                <strong>${escapeHtml(item.name)}</strong> — ${item.qty} units × ₹${item.price.toFixed(2)} = ₹${subtotal.toFixed(2)}
                             </span>
                             <button onclick="removeItem(${index})" style="background:#d32f2f !important; color:white; border:none; border-radius:4px; padding:5px 10px;"><i class="fas fa-trash-alt"></i></button>
                         </div>
@@ -1164,7 +1098,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             }
             window.removeItem = async function (index) {
                 const item = cart[index];
-                // Give the stock back to the listing if this item came from a real product listing
+                // give stock back if this came from a real listing
                 if (item && item.productId && typeof window.fbUpdateProductQty === 'function') {
                     const products = loadProductListings();
                     const product = products.find(p => p.id === item.productId);
@@ -1186,16 +1120,12 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     return;
                 }
 
-                // Simulate payment processing
+                // fake payment processing
                 showToast(translations[currentLang]['alert-pay-processing'](amount), true);
                 
                 setTimeout(() => {
                     showToast(translations[currentLang]['alert-pay-success'](amount), true);
-                    // Record each real (farmer-listed) item as a completed purchase so
-                    // the buyer can review it / message the farmer from "My Purchases".
-                    // Manually-typed Quick Buy items have no productId/farmerName behind
-                    // them (they're not a real listing), so there's no farmer to review
-                    // or message — skip those.
+                    // only real listings can be reviewed/messaged, skip quick-buy items
                     cart.forEach(item => {
                         if (item.productId && item.farmerName) {
                             recordPurchase(item);
@@ -1250,7 +1180,6 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                         personalCountEl.textContent = display.toLocaleString();
                     } else {
                         clearInterval(counterAnim);
-                        // Apply and remove glow effect
                         personalCountEl.classList.add('highlight');
                         setTimeout(() => {
                             personalCountEl.classList.remove('highlight');
@@ -1271,17 +1200,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             const navLinks = Array.from(document.querySelectorAll('.nav-link'));
             let activeSectionID = 'marketplace';
 
-            // ---------------------------------------------------------------
-            // MOBILE FIX: the sliding panels are position:absolute, so
-            // .container never naturally grows to fit whichever section is
-            // showing. It used to rely on a hardcoded min-height guess
-            // (1000px), which clipped real content on phones — a stacked,
-            // single-column layout is much taller than desktop, so product
-            // listings, cart items, or chat history below that guessed
-            // height were simply invisible with no way to scroll to them.
-            // Instead, measure the active section's actual height and keep
-            // .container sized to match, live, on every possible change.
-            // ---------------------------------------------------------------
+            // mobile fix: panels are position:absolute so container doesn't auto-grow.
+            // old hardcoded min-height clipped content on phones, now measure actual height instead
             function syncContainerHeight() {
                 if (!container) return;
                 const activeSection = document.getElementById(activeSectionID);
@@ -1343,12 +1263,10 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 }, 50);
 
                 activeSectionID = targetID;
-                // Resize .container to the incoming section right away (best guess)
-                // and again once its slide-in transition finishes (exact final height).
+                // resize now (best guess) and again after the slide finishes
                 syncContainerHeight();
                 setTimeout(syncContainerHeight, 650);
 
-                // Updateting Navbar
                 navLinks.forEach(l => l.classList.remove('active'));
                 if (link) link.classList.add('active');
             }
@@ -1356,9 +1274,6 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             navLinks.forEach((link) => {
                 link.addEventListener('click', (e) => {
                     e.preventDefault();
-                    // A drag that ended on top of a pill shouldn't also count as a tap
-                    // on it — the wheel's own click-suppression (see setupNavWheel)
-                    // stops those before they get here.
                     if (window.audioPlayer && !window.audioPlayer.paused) {
                         window.audioPlayer.pause();
                         window.audioPlayer.currentTime = 0;
@@ -1369,20 +1284,12 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     }
 
                     const targetID = link.getAttribute('data-target');
-                    // Center the tapped pill in the wheel, then switch pages.
                     link.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
                     navigateToSection(targetID, link);
                 });
             });
 
-            /* ===================================================== */
-            /* NAVBAR "SCROLL WHEEL" — draggable, snap-to-center pages */
-            /* ===================================================== */
-            // Turns the navbar into a horizontally scrollable wheel: drag/swipe it
-            // and whichever page pill lands in the center becomes the active page
-            // (like a picker wheel), with nearby pills shrinking/fading based on
-            // distance from center. Works via native touch-scrolling on mobile;
-            // mouse-drag is added below for desktop/trackpad users.
+            // navbar as a draggable "picker wheel" - centered pill becomes active page, others shrink/fade
             function setupNavWheel() {
                 const navbar = document.querySelector('.navbar');
                 if (!navbar) return;
@@ -1391,8 +1298,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     return navLinks.filter(item => getComputedStyle(item).display !== 'none');
                 }
 
-                // Pad both ends so the first/last visible pill can still reach the
-                // horizontal center of the wheel, same trick used by native carousels.
+                // pad both ends so first/last pill can still reach center
                 function sizeSpacers() {
                     const visible = visibleItems();
                     if (visible.length === 0) return;
@@ -1403,8 +1309,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     navbar.style.paddingRight = Math.max(containerWidth / 2 - lastW / 2, 0) + 'px';
                 }
 
-                // Scale/fade each pill by how far it sits from the wheel's center —
-                // gives the continuous "picker wheel" feel while dragging/scrolling.
+                // scale/fade pills based on distance from center
                 function updateWheelVisuals() {
                     const rect = navbar.getBoundingClientRect();
                     const center = rect.left + rect.width / 2;
@@ -1439,8 +1344,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     settleTimer = setTimeout(onScrollSettled, 130);
                 }, { passive: true });
 
-                // Mouse-drag support (touch devices already get free horizontal
-                // scrolling from overflow-x: auto on the navbar).
+                // mouse-drag for desktop (touch already scrolls natively)
                 let isDown = false;
                 let dragged = false;
                 let startX = 0;
@@ -1464,8 +1368,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     isDown = false;
                     navbar.classList.remove('wheel-dragging');
                 });
-                // Swallow the click a drag ends on, so it doesn't also jump-navigate
-                // to whichever pill the cursor happened to release over.
+                // don't let a drag-release also trigger a click-navigate
                 navbar.addEventListener('click', (e) => {
                     if (dragged) {
                         e.preventDefault();
@@ -1482,36 +1385,27 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 sizeSpacers();
                 updateWheelVisuals();
 
-                // Exposed so login/logout (which changes which pills are visible via
-                // farmer-only/buyer-only) can re-center the wheel around the new set.
+                // login/logout changes which pills show, so let it re-center the wheel
                 window.__resizeNavWheel = () => {
                     sizeSpacers();
                     updateWheelVisuals();
                 };
             }
             setupNavWheel();
-            /* ================= END NAVBAR SCROLL WHEEL ================= */
 
-
-            // Recompute on window resize (orientation change, keyboard open/close, etc.)
             window.addEventListener('resize', debouncedSyncHeight);
 
-            // Recompute whenever the active section's content changes — covers
-            // product listings syncing in from Firestore, cart updates, chat
-            // messages, notifications, language switches, login/logout, etc.
-            // without needing to sprinkle syncContainerHeight() calls through
-            // every single render function.
+            // recompute height on any content change (products, cart, chat, lang switch etc)
+            // instead of calling syncContainerHeight() everywhere manually
             if (container) {
                 const containerObserver = new MutationObserver(debouncedSyncHeight);
                 containerObserver.observe(container, { childList: true, subtree: true, characterData: true });
             }
 
-            // Initial sizing once the page has settled.
             syncContainerHeight();
             setTimeout(syncContainerHeight, 300);
 
-
-            // Text-to-Speech            
+            // text to speech
             const audioEl = document.getElementById('ttsAudio');
             window.audioPlayer = audioEl; 
 
@@ -1532,87 +1426,71 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 }
             }
 
+            // Shared by the section "read aloud" buttons and the learning-guide listen
+            // button — both just gather some text and hand it to Gemini TTS the same way.
+            async function speakText(button, content) {
+                if (!content) return;
+
+                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                button.classList.add('speaking');
+
+                try {
+                    const voiceName = (TTS_LANG_CONFIG[body.getAttribute('lang')] || TTS_LANG_CONFIG.en).voice;
+                    const response = await fetchWithBackoff(TTS_PROXY_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: content, voiceName })
+                    });
+
+                    const result = await response.json();
+                    const part = result?.candidates?.[0]?.content?.parts?.[0];
+                    const audioData = part?.inlineData?.data;
+                    const mimeType = part?.inlineData?.mimeType;
+
+                    if (audioData && mimeType && mimeType.startsWith("audio/")) {
+                        const sampleRateMatch = mimeType.match(/rate=(\d+)/);
+                        const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 16000;
+                        const pcm16 = new Int16Array(base64ToArrayBuffer(audioData));
+                        const wavBlob = pcmToWav(pcm16, sampleRate);
+
+                        if (audioEl.src) URL.revokeObjectURL(audioEl.src);
+                        audioEl.src = URL.createObjectURL(wavBlob);
+                        audioEl.play();
+
+                        button.innerHTML = '<i class="fas fa-volume-off"></i>';
+                        audioEl.onended = () => stopPlayback();
+                    } else {
+                        showToast("TTS failed: Could not generate audio.", false);
+                        stopPlayback();
+                    }
+                } catch (error) {
+                    console.error("TTS API Error:", error);
+                    showToast("TTS service unavailable. Please try later.", false);
+                    stopPlayback();
+                }
+            }
+
             const ttsButtons = document.querySelectorAll('.tts-button');
             ttsButtons.forEach(button => {
-                button.addEventListener('click', async () => {
-                    const contentId = button.getAttribute('data-content-id');
-                    const sectionElement = document.getElementById(contentId);
-                    
+                button.addEventListener('click', () => {
                     if (button.classList.contains('speaking')) {
-                        
                         stopPlayback();
                         return;
                     } else if (!audioEl.paused) {
-                        
                         stopPlayback();
                     }
 
-                    
+                    const sectionElement = document.getElementById(button.getAttribute('data-content-id'));
                     let content = '';
                     sectionElement.querySelectorAll('[data-key], p, h2, h3, h4, li').forEach(el => {
-                        // Exclude buttons and chat content
+                        // skip buttons and chat content
                         if (!el.classList.contains('tts-button') && !el.classList.contains('tooltip-text') && !el.closest('#agriChatContainer')) {
                             content += el.textContent.trim() + '. ';
                         }
                     });
 
-                    if (!content) return;
-
-                    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
                     button.style.boxShadow = `0 0 10px var(--color-accent)`;
-                    button.classList.add('speaking');
-
-                    try {
-                        // --- Language selection for TTS ---
-                        const ttsConfig = TTS_LANG_CONFIG[body.getAttribute('lang')] || TTS_LANG_CONFIG.en;
-                        const langCode = ttsConfig.code;
-                        // Using different voices for immersion/variety
-                        const voiceName = ttsConfig.voice;
-                        // --- End Language selection for TTS ---
-
-                        // TTS now goes through the Cloud Function proxy — it holds the
-                        // Gemini key server-side and builds the full request itself.
-                        const payload = { text: content, voiceName: voiceName };
-
-                        const response = await fetchWithBackoff(TTS_PROXY_URL, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(payload)
-                        });
-
-                        const result = await response.json();
-                        const part = result?.candidates?.[0]?.content?.parts?.[0];
-                        const audioData = part?.inlineData?.data;
-                        const mimeType = part?.inlineData?.mimeType;
-
-                        if (audioData && mimeType && mimeType.startsWith("audio/")) {
-                            const sampleRateMatch = mimeType.match(/rate=(\d+)/);
-                            const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 16000;
-                            const pcmData = base64ToArrayBuffer(audioData);
-                            const pcm16 = new Int16Array(pcmData);
-                            const wavBlob = pcmToWav(pcm16, sampleRate);
-                            
-                            if (audioEl.src) URL.revokeObjectURL(audioEl.src);
-                            
-                            const audioUrl = URL.createObjectURL(wavBlob);
-                            audioEl.src = audioUrl;
-                            audioEl.play();
-
-                            button.innerHTML = '<i class="fas fa-volume-off"></i>';
-                            
-                            audioEl.onended = () => {
-                                stopPlayback();
-                            };
-                        } else {
-                            showToast("TTS failed: Could not generate audio.", false);
-                            stopPlayback();
-                        }
-
-                    } catch (error) {
-                        console.error("TTS API Error:", error);
-                        showToast("TTS service unavailable. Please try later.", false);
-                        stopPlayback();
-                    }
+                    speakText(button, content);
                 });
             });
             const langToggle = document.getElementById('langToggle');
@@ -1993,7 +1871,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 stopPlayback();
             }
 
-            // Build the language dropdown menu from SUPPORTED_LANGS/LANG_LABELS
+            // build lang dropdown from SUPPORTED_LANGS/LANG_LABELS
             const langMenu = document.getElementById('langMenu');
             if (langMenu) {
                 langMenu.innerHTML = SUPPORTED_LANGS.map(code =>
@@ -2027,9 +1905,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             const savedLang = localStorage.getItem('language') || 'en';
             applyTranslation(savedLang);
 
-            /* ===================================================== */
-            /* EASY LEARNING GUIDE MODAL — "Tap to see easy guide"   */
-            /* ===================================================== */
+            // "tap to see easy guide" learning modal
             const learningGuides = {
                 irrigation: {
                     courseNum: 1,
@@ -2139,7 +2015,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 });
             });
 
-            techniqueListenBtn.addEventListener('click', async () => {
+            techniqueListenBtn.addEventListener('click', () => {
                 if (techniqueListenBtn.classList.contains('speaking')) {
                     stopPlayback();
                     return;
@@ -2151,59 +2027,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 techniqueModal.querySelectorAll('h3, .technique-step, .technique-tip').forEach(el => {
                     content += el.textContent.trim() + '. ';
                 });
-                if (!content) return;
-
-                techniqueListenBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-                techniqueListenBtn.classList.add('speaking');
-
-                try {
-                    const ttsConfig = TTS_LANG_CONFIG[body.getAttribute('lang')] || TTS_LANG_CONFIG.en;
-                    const langCode = ttsConfig.code;
-                    const voiceName = ttsConfig.voice;
-
-                    // TTS now goes through the Cloud Function proxy — it holds the
-                    // Gemini key server-side and builds the full request itself.
-                    const payload = { text: content, voiceName: voiceName };
-
-                    const response = await fetchWithBackoff(TTS_PROXY_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    const result = await response.json();
-                    const part = result?.candidates?.[0]?.content?.parts?.[0];
-                    const audioData = part?.inlineData?.data;
-                    const mimeType = part?.inlineData?.mimeType;
-
-                    if (audioData && mimeType && mimeType.startsWith("audio/")) {
-                        const sampleRateMatch = mimeType.match(/rate=(\d+)/);
-                        const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 16000;
-                        const pcmData = base64ToArrayBuffer(audioData);
-                        const pcm16 = new Int16Array(pcmData);
-                        const wavBlob = pcmToWav(pcm16, sampleRate);
-
-                        if (audioEl.src) URL.revokeObjectURL(audioEl.src);
-
-                        audioEl.src = URL.createObjectURL(wavBlob);
-                        audioEl.play();
-
-                        techniqueListenBtn.innerHTML = '<i class="fas fa-volume-off"></i>';
-
-                        audioEl.onended = () => {
-                            stopPlayback();
-                        };
-                    } else {
-                        showToast("TTS failed: Could not generate audio.", false);
-                        stopPlayback();
-                    }
-                } catch (error) {
-                    console.error("TTS API Error:", error);
-                    showToast("TTS service unavailable. Please try later.", false);
-                    stopPlayback();
-                }
+                speakText(techniqueListenBtn, content);
             });
-            /* ================= END EASY LEARNING GUIDE MODAL ================= */
 
             const contactForm = document.getElementById('contactForm');
 
@@ -2235,8 +2060,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     return;
                 }
                 try {
-                    // Compress so the listing fits Firestore's 1MB document limit
-                    // and syncs quickly across every account/device.
+                    // compress so it fits firestore's 1mb limit
                     sellImageDataUrl = await compressImageFile(file);
                     sellImagePreview.src = sellImageDataUrl;
                     sellImagePreview.style.display = 'block';
