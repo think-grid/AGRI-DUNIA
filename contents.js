@@ -207,7 +207,6 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             /* AUTH / LOGIN SYSTEM — Farmer vs Buyer                 */
             /* ===================================================== */
             const AUTH_STORAGE_KEY = 'agriUserProfile';
-            const PRODUCTS_STORAGE_KEY = 'agriProductListings';
             const NOTIF_STORAGE_KEY = 'agriFarmerNotifications';
             // Declared early so functions that read it (e.g. renderNotifications, called from
             // initAuth on page load) never run before it's initialized.
@@ -494,16 +493,48 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             /* ===================================================== */
             /* PRODUCT LISTINGS — Farmer lists, Buyer browses/buys   */
             /* ===================================================== */
+            // Product listings now live in Firestore (see firebase.js) so every
+            // account/device sees the same marketplace in real time, instead of
+            // each browser only seeing what it itself saved to localStorage.
             function loadProductListings() {
-                try {
-                    return JSON.parse(localStorage.getItem(PRODUCTS_STORAGE_KEY)) || [];
-                } catch (e) {
-                    return [];
-                }
+                return window.__agriLatestProducts || [];
             }
 
-            function saveProductListings(products) {
-                localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
+            // Whenever Firestore's live listener gets new data (a listing added,
+            // removed, or bought — from ANY account, ANY device), re-render.
+            window.onProductsUpdated = function () {
+                renderProductListings();
+            };
+
+            // Compress an image file down to a data URL small enough to store in a
+            // Firestore document (1 MB limit per doc). Raw camera photos can be
+            // several MB, which would otherwise make fbAddProduct() silently fail.
+            function compressImageFile(file, maxDim = 800, quality = 0.7) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            let { width, height } = img;
+                            if (width > height && width > maxDim) {
+                                height = Math.round(height * (maxDim / width));
+                                width = maxDim;
+                            } else if (height > maxDim) {
+                                width = Math.round(width * (maxDim / height));
+                                height = maxDim;
+                            }
+                            const canvas = document.createElement('canvas');
+                            canvas.width = width;
+                            canvas.height = height;
+                            canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                            resolve(canvas.toDataURL('image/jpeg', quality));
+                        };
+                        img.onerror = reject;
+                        img.src = e.target.result;
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
             }
 
             // Farmers may only list products under these fixed categories.
@@ -515,7 +546,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 'Tools': '🛠️'
             };
 
-            function addProductListing(name, qty, price, imageDataUrl, category) {
+            async function addProductListing(name, qty, price, imageDataUrl, category) {
                 if (!currentUser || currentUser.role !== 'farmer') return;
                 if (!name || isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
                     showToast(translations[currentLang]['toast-error-fields'], false);
@@ -529,30 +560,42 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     showToast(translations[currentLang]['toast-error-image'], false);
                     return;
                 }
-                const products = loadProductListings();
-                products.push({
-                    id: Date.now() + Math.random().toString(16).slice(2),
-                    name,
-                    qty: parseInt(qty),
-                    price: parseFloat(price),
-                    farmerName: currentUser.name,
-                    farmerPlace: currentUser.place || '',
-                    image: imageDataUrl,
-                    category
-                });
-                saveProductListings(products);
-                renderProductListings();
-                showToast(`${name} has been listed for sale!`, true);
-            }
-
-            window.removeProductListing = function (id) {
-                const products = loadProductListings().filter(p => p.id !== id);
-                saveProductListings(products);
-                renderProductListings();
-                showToast('Listing removed.', true);
+                if (typeof window.fbAddProduct !== 'function') {
+                    showToast('Marketplace sync is unavailable right now — please try again in a moment.', false);
+                    return;
+                }
+                try {
+                    await window.fbAddProduct({
+                        name,
+                        qty: parseInt(qty),
+                        price: parseFloat(price),
+                        farmerName: currentUser.name,
+                        farmerPlace: currentUser.place || '',
+                        image: imageDataUrl,
+                        category
+                    });
+                    // No need to call renderProductListings() here — the Firestore
+                    // onSnapshot listener in firebase.js will fire onProductsUpdated
+                    // for this browser (and every other logged-in account) shortly.
+                    showToast(`${name} has been listed for sale!`, true);
+                } catch (err) {
+                    console.error('Failed to add product listing:', err);
+                    showToast('Could not publish your listing. Please check your connection and try again.', false);
+                }
             };
 
-            window.buyProductListing = function (id) {
+            window.removeProductListing = async function (id) {
+                if (typeof window.fbRemoveProduct !== 'function') return;
+                try {
+                    await window.fbRemoveProduct(id);
+                    showToast('Listing removed.', true);
+                } catch (err) {
+                    console.error('Failed to remove product listing:', err);
+                    showToast('Could not remove the listing. Please try again.', false);
+                }
+            };
+
+            window.buyProductListing = async function (id) {
                 const products = loadProductListings();
                 const product = products.find(p => p.id === id);
                 if (!product || product.qty <= 0) return;
@@ -566,10 +609,19 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     return;
                 }
 
-                // Reduce the remaining stock by the quantity bought
-                product.qty -= requestedQty;
-                saveProductListings(products);
-                renderProductListings();
+                if (typeof window.fbUpdateProductQty !== 'function') {
+                    showToast('Marketplace sync is unavailable right now — please try again in a moment.', false);
+                    return;
+                }
+
+                const newQty = product.qty - requestedQty;
+                try {
+                    await window.fbUpdateProductQty(id, newQty);
+                } catch (err) {
+                    console.error('Failed to update product quantity:', err);
+                    showToast('Could not complete the purchase. Please try again.', false);
+                    return;
+                }
 
                 const buyerName = (currentUser && currentUser.name) ? currentUser.name : 'A buyer';
                 const unitWordEn = requestedQty > 1 ? 'units' : 'unit';
@@ -618,7 +670,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                                 </div>
                                 ${p.qty > 0 ? `
                                 <div class="buy-controls" style="display:flex;align-items:center;gap:8px;">
-                                    <input type="number" id="buyQty-${p.id}" min="1" max="${p.qty}" value="1" aria-label="Quantity to buy" style="width:60px;padding:6px;border-radius:4px;border:1px solid var(--color-card-border); background: var(--color-card-bg); color: var(--color-text);">
+                                    <input type="number" id="buyQty-${p.id}" min="1" max="${p.qty}" value="1" aria-label="Quantity to buy" style="width:60px;padding:6px;border-radius:4px;border:1px solid var(--color-card-border); background: var(--color-card-bg); color: var(--color-text); font-size:16px;">
                                     <button onclick="buyProductListing('${p.id}')"><i class="fas fa-cart-plus"></i> Add to Cart</button>
                                 </div>` : ''}
                             </div>
@@ -769,16 +821,18 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 showToast(translations[currentLang]['alert-cart-add'](name), true);
                 displayCart();
             }
-            window.removeItem = function (index) {
+            window.removeItem = async function (index) {
                 const item = cart[index];
                 // Give the stock back to the listing if this item came from a real product listing
-                if (item && item.productId) {
+                if (item && item.productId && typeof window.fbUpdateProductQty === 'function') {
                     const products = loadProductListings();
                     const product = products.find(p => p.id === item.productId);
                     if (product) {
-                        product.qty += item.qty;
-                        saveProductListings(products);
-                        renderProductListings();
+                        try {
+                            await window.fbUpdateProductQty(item.productId, product.qty + item.qty);
+                        } catch (err) {
+                            console.error('Failed to restore stock:', err);
+                        }
                     }
                 }
                 cart.splice(index, 1);
@@ -865,7 +919,33 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             const navLinks = document.querySelectorAll('.nav-link');
             let activeSectionID = 'marketplace';
 
-            
+            // ---------------------------------------------------------------
+            // MOBILE FIX: the sliding panels are position:absolute, so
+            // .container never naturally grows to fit whichever section is
+            // showing. It used to rely on a hardcoded min-height guess
+            // (1000px), which clipped real content on phones — a stacked,
+            // single-column layout is much taller than desktop, so product
+            // listings, cart items, or chat history below that guessed
+            // height were simply invisible with no way to scroll to them.
+            // Instead, measure the active section's actual height and keep
+            // .container sized to match, live, on every possible change.
+            // ---------------------------------------------------------------
+            function syncContainerHeight() {
+                if (!container) return;
+                const activeSection = document.getElementById(activeSectionID);
+                if (activeSection) {
+                    container.style.minHeight = activeSection.scrollHeight + 'px';
+                }
+            }
+            function debounce(fn, wait) {
+                let t;
+                return (...args) => {
+                    clearTimeout(t);
+                    t = setTimeout(() => fn(...args), wait);
+                };
+            }
+            const debouncedSyncHeight = debounce(syncContainerHeight, 120);
+
             sections.forEach((sec, i) => {
                  if (sec.id !== activeSectionID) {
                     sec.classList.remove('active-panel');
@@ -918,12 +998,33 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     }, 50); 
                     
                     activeSectionID = targetID;
+                    // Resize .container to the incoming section right away (best guess)
+                    // and again once its slide-in transition finishes (exact final height).
+                    syncContainerHeight();
+                    setTimeout(syncContainerHeight, 650);
 
                     // Updateting Navbar 
                     navLinks.forEach(l => l.classList.remove('active'));
                     link.classList.add('active');
                 });
             });
+
+            // Recompute on window resize (orientation change, keyboard open/close, etc.)
+            window.addEventListener('resize', debouncedSyncHeight);
+
+            // Recompute whenever the active section's content changes — covers
+            // product listings syncing in from Firestore, cart updates, chat
+            // messages, notifications, language switches, login/logout, etc.
+            // without needing to sprinkle syncContainerHeight() calls through
+            // every single render function.
+            if (container) {
+                const containerObserver = new MutationObserver(debouncedSyncHeight);
+                containerObserver.observe(container, { childList: true, subtree: true, characterData: true });
+            }
+
+            // Initial sizing once the page has settled.
+            syncContainerHeight();
+            setTimeout(syncContainerHeight, 300);
 
 
             // Text-to-Speech            
@@ -1036,12 +1137,15 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     'header-title': 'AGRI DUNIYA',
                     'header-tagline': 'Empowering Farmers with Digital Access to Markets, Knowledge & Government Schemes',
                     'nav-market': 'Marketplace',
+                    'nav-myproducts': 'My Products',
                     'nav-learning': 'Learning Hub',
                     'nav-videos': 'Videos',
                     'nav-schemes': 'Schemes',
                     'nav-contact': 'Contact',
                     'sec-market-title': 'Digital Marketplace',
                     'sec-market-p': 'Buy and Sell farm products directly. Farmers can list their crops, and buyers can purchase them directly ensuring fair trade.',
+                    'sec-myproducts-title': 'My Products',
+                    'sec-myproducts-p': "Manage the products you've listed for sale — buyers can see and purchase these directly from the marketplace.",
                     'sell-title': 'Sell Your Products',
                     'sell-button': 'Post for Sale',
                     'sell-category-label': 'Product Category (required)',
@@ -1101,12 +1205,15 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     'header-title': 'एग्री दुनिया',
                     'header-tagline': 'किसानों को बाज़ार, ज्ञान और सरकारी योजनाओं तक डिजिटल पहुँच के साथ सशक्त बनाना',
                     'nav-market': 'बाज़ार',
+                    'nav-myproducts': 'मेरे उत्पाद',
                     'nav-learning': 'सीखने का केंद्र',
                     'nav-videos': 'वीडियो',
                     'nav-schemes': 'योजनाएँ',
                     'nav-contact': 'संपर्क',
                     'sec-market-title': 'डिजिटल बाज़ार',
                     'sec-market-p': 'कृषि उत्पादों को सीधे खरीदें और बेचें। किसान अपनी फसलें सूचीबद्ध कर सकते हैं, और खरीदार सीधे खरीद सकते हैं, जिससे उचित व्यापार सुनिश्चित होगा।',
+                    'sec-myproducts-title': 'मेरे उत्पाद',
+                    'sec-myproducts-p': 'आपके द्वारा बिक्री के लिए सूचीबद्ध उत्पादों को प्रबंधित करें — खरीदार इन्हें सीधे बाज़ार से देख और खरीद सकते हैं।',
                     'sell-title': 'अपने उत्पाद बेचें',
                     'sell-button': 'बिक्री के लिए पोस्ट करें',
                     'sell-category-label': 'उत्पाद श्रेणी (आवश्यक)',
@@ -1166,12 +1273,15 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     'header-title': 'அக்ரி துனியா',
                     'header-tagline': 'சந்தை, அறிவு மற்றும் அரசு திட்டங்களுக்கான டிஜிட்டல் அணுகலுடன் விவசாயிகளை மேம்படுத்துதல்',
                     'nav-market': 'சந்தை',
+                    'nav-myproducts': 'எனது பொருட்கள்',
                     'nav-learning': 'கற்றல் மையம்',
                     'nav-videos': 'வீடியோக்கள்',
                     'nav-schemes': 'திட்டங்கள்',
                     'nav-contact': 'தொடர்பு',
                     'sec-market-title': 'டிஜிட்டல் சந்தை',
                     'sec-market-p': 'விவசாய பொருட்களை நேரடியாக வாங்கவும் விற்கவும். விவசாயிகள் தங்கள் பயிர்களை பட்டியலிடலாம், வாங்குபவர்கள் நேரடியாக வாங்கலாம், இது நியாயமான வர்த்தகத்தை உறுதி செய்யும்.',
+                    'sec-myproducts-title': 'எனது பொருட்கள்',
+                    'sec-myproducts-p': 'நீங்கள் விற்பனைக்கு பட்டியலிட்ட பொருட்களை நிர்வகிக்கவும் — வாங்குபவர்கள் இவற்றை சந்தையில் நேரடியாகக் காணலாம் மற்றும் வாங்கலாம்.',
                     'sell-title': 'உங்கள் பொருட்களை விற்கவும்',
                     'sell-button': 'விற்பனைக்கு இடுங்கள்',
                     'sell-category-label': 'பொருள் வகை (அவசியம்)',
@@ -1231,12 +1341,15 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     'header-title': 'అగ్రి దునియా',
                     'header-tagline': 'మార్కెట్లు, జ్ఞానం మరియు ప్రభుత్వ పథకాలకు డిజిటల్ యాక్సెస్‌తో రైతులను శక్తివంతం చేయడం',
                     'nav-market': 'మార్కెట్‌ప్లేస్',
+                    'nav-myproducts': 'నా ఉత్పత్తులు',
                     'nav-learning': 'లెర్నింగ్ హబ్',
                     'nav-videos': 'వీడియోలు',
                     'nav-schemes': 'పథకాలు',
                     'nav-contact': 'సంప్రదించండి',
                     'sec-market-title': 'డిజిటల్ మార్కెట్‌ప్లేస్',
                     'sec-market-p': 'వ్యవసాయ ఉత్పత్తులను నేరుగా కొనండి మరియు అమ్మండి. రైతులు తమ పంటలను జాబితా చేయవచ్చు, కొనుగోలుదారులు నేరుగా కొనుగోలు చేయవచ్చు, ఇది న్యాయమైన వాణిజ్యాన్ని నిర్ధారిస్తుంది.',
+                    'sec-myproducts-title': 'నా ఉత్పత్తులు',
+                    'sec-myproducts-p': 'మీరు అమ్మకానికి జాబితా చేసిన ఉత్పత్తులను నిర్వహించండి — కొనుగోలుదారులు వీటిని మార్కెట్‌ప్లేస్ నుండి నేరుగా చూసి కొనుగోలు చేయవచ్చు.',
                     'sell-title': 'మీ ఉత్పత్తులను అమ్మండి',
                     'sell-button': 'అమ్మకానికి పోస్ట్ చేయండి',
                     'sell-category-label': 'ఉత్పత్తి వర్గం (అవసరం)',
@@ -1296,12 +1409,15 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     'header-title': 'অ্যাগ্রি দুনিয়া',
                     'header-tagline': 'বাজার, জ্ঞান এবং সরকারি প্রকল্পে ডিজিটাল অ্যাক্সেসের মাধ্যমে কৃষকদের ক্ষমতায়ন',
                     'nav-market': 'মার্কেটপ্লেস',
+                    'nav-myproducts': 'আমার পণ্য',
                     'nav-learning': 'লার্নিং হাব',
                     'nav-videos': 'ভিডিও',
                     'nav-schemes': 'প্রকল্প',
                     'nav-contact': 'যোগাযোগ',
                     'sec-market-title': 'ডিজিটাল মার্কেটপ্লেস',
                     'sec-market-p': 'সরাসরি কৃষি পণ্য কিনুন এবং বিক্রি করুন। কৃষকরা তাদের ফসল তালিকাভুক্ত করতে পারেন, এবং ক্রেতারা সরাসরি কিনতে পারেন, যা ন্যায্য বাণিজ্য নিশ্চিত করে।',
+                    'sec-myproducts-title': 'আমার পণ্য',
+                    'sec-myproducts-p': 'আপনি বিক্রির জন্য তালিকাভুক্ত পণ্যগুলি পরিচালনা করুন — ক্রেতারা এগুলি সরাসরি মার্কেটপ্লেস থেকে দেখতে ও কিনতে পারবেন।',
                     'sell-title': 'আপনার পণ্য বিক্রি করুন',
                     'sell-button': 'বিক্রির জন্য পোস্ট করুন',
                     'sell-category-label': 'পণ্যের বিভাগ (আবশ্যক)',
@@ -1627,20 +1743,25 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             const sellImagePreview = document.getElementById('sellImagePreview');
             let sellImageDataUrl = '';
 
-            sellImageInput.addEventListener('change', () => {
+            sellImageInput.addEventListener('change', async () => {
                 const file = sellImageInput.files[0];
                 if (!file) {
                     sellImageDataUrl = '';
                     sellImagePreview.style.display = 'none';
                     return;
                 }
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    sellImageDataUrl = e.target.result;
+                try {
+                    // Compress so the listing fits Firestore's 1MB document limit
+                    // and syncs quickly across every account/device.
+                    sellImageDataUrl = await compressImageFile(file);
                     sellImagePreview.src = sellImageDataUrl;
                     sellImagePreview.style.display = 'block';
-                };
-                reader.readAsDataURL(file);
+                } catch (err) {
+                    console.error('Failed to process image:', err);
+                    showToast('Could not process that photo. Please try a different image.', false);
+                    sellImageDataUrl = '';
+                    sellImagePreview.style.display = 'none';
+                }
             });
 
             sellButton.addEventListener('click', function () {
@@ -1700,20 +1821,23 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             const drawerCategorySelect = document.getElementById('drawerCategory');
             let drawerImageDataUrl = '';
 
-            drawerImageInput.addEventListener('change', () => {
+            drawerImageInput.addEventListener('change', async () => {
                 const file = drawerImageInput.files[0];
                 if (!file) {
                     drawerImageDataUrl = '';
                     drawerImagePreview.style.display = 'none';
                     return;
                 }
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    drawerImageDataUrl = e.target.result;
+                try {
+                    drawerImageDataUrl = await compressImageFile(file);
                     drawerImagePreview.src = drawerImageDataUrl;
                     drawerImagePreview.style.display = 'block';
-                };
-                reader.readAsDataURL(file);
+                } catch (err) {
+                    console.error('Failed to process image:', err);
+                    showToast('Could not process that photo. Please try a different image.', false);
+                    drawerImageDataUrl = '';
+                    drawerImagePreview.style.display = 'none';
+                }
             });
 
             function openDrawer(type) {
