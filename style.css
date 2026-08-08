@@ -33,8 +33,7 @@
         }
 
         html, body {
-            /* Safety net: nothing on the page should be able to force a
-               horizontal scrollbar on mobile. */
+            /* no horizontal scrollbar on mobile */
             overflow-x: hidden;
             width: 100%;
         }
@@ -43,16 +42,12 @@
         }
         @media (max-width: 700px) {
             body {
-                /* background-attachment:fixed is unreliable/janky on many
-                   mobile browsers (notably iOS Safari) — fall back to a
-                   normal scrolling background there. */
+                /* fixed bg is janky on ios safari, scroll instead */
                 background-attachment: scroll;
             }
         }
 
-        /* ========================================= */
         /* LOGIN / ROLE SELECTION OVERLAY */
-        /* ========================================= */
         #mainAppTop, #mainAppFooter {
             display: none;
         }
@@ -201,9 +196,7 @@
             color: var(--color-primary);
         }
 
-        /* ========================================= */
         /* GOOGLE SIGN-IN (login forms) */
-        /* ========================================= */
         .google-btn-slot {
             display: flex;
             justify-content: center;
@@ -236,14 +229,7 @@
             white-space: nowrap;
         }
 
-        /* ========================================= */
-        /* PROFILE BAR (header) */
-        /* ========================================= */
-        /* Account control is now a single circle matching the bell/theme/
-           language buttons, with name, role and logout tucked into a
-           dropdown — same click-to-reveal pattern used elsewhere in the
-           header, instead of an always-open pill sitting apart in size
-           and shape from every other icon next to it. */
+        /* profile bar - circle icon that opens a dropdown, matches other header buttons */
         #profileBar {
             display: none;
             position: relative;
@@ -333,9 +319,7 @@
             background: rgba(211, 47, 47, 0.1);
         }
 
-        /* ========================================= */
         /* NOTIFICATION BELL (Farmer purchase alerts) */
-        /* ========================================= */
         .notif-bell-btn {
             background: rgba(255, 255, 255, 0.16);
             color: #fff;
@@ -411,9 +395,7 @@
             margin: 0;
         }
 
-        /* ========================================= */
         /* ROLE-BASED VISIBILITY (Farmer vs Buyer menus) */
-        /* ========================================= */
         .farmer-only, .buyer-only {
             display: none;
         }
@@ -434,20 +416,8 @@
         body.role-buyer a.nav-link.buyer-only {
             display: flex;
         }
-        /* The plain .nav-link rule further down this file also sets
-           display:flex with the same specificity as .farmer-only/.buyer-only
-           above, and — because it's declared later — was winning the
-           cascade and showing every pill to every role. Force the
-           wrong-role pill to hide, regardless of source order elsewhere
-           in the stylesheet. */
-        body.role-farmer a.nav-link.buyer-only,
-        body.role-buyer a.nav-link.farmer-only {
-            display: none !important;
-        }
 
-        /* ========================================= */
         /* PRODUCT LISTINGS PANEL (My Listings / Available Products) */
-        /* ========================================= */
         .listings-panel {
             margin-top: 30px;
             padding: 20px;
@@ -506,9 +476,7 @@
             flex-shrink: 0;
         }
 
-        /* ========================================= */
         /* PRODUCT PHOTO UPLOAD (Sell forms & drawer) */
-        /* ========================================= */
         .sell-image-label {
             display: block;
             text-align: left;
@@ -542,9 +510,7 @@
             white-space: nowrap;
         }
 
-        /* ========================================= */
         /* PRODUCT RATINGS (average stars on listings) */
-        /* ========================================= */
         .rating-badge {
             display: inline-block;
             font-size: 0.85em;
@@ -556,9 +522,7 @@
             font-size: 0.9em;
         }
 
-        /* ========================================= */
         /* BUYER PURCHASES — reviews & farmer messages */
-        /* ========================================= */
         .purchase-item {
             display: flex;
             flex-direction: column;
@@ -717,8 +681,7 @@
             background: var(--color-navbar-bg);
             box-shadow: 0 2px 4px var(--color-shadow);
             padding: 0;
-            /* "Scroll wheel" behavior: a single non-wrapping row you drag/swipe
-               through, with each pill snapping to the center as it settles. */
+            /* scroll wheel - drag/swipe row, pills snap to center */
             flex-wrap: nowrap;
             overflow-x: auto;
             overflow-y: hidden;
@@ -775,11 +738,7 @@
         }
 
         
-        /* 3. FUNCTIONAL ENHANCEMENTS - TOGGLE & COUNTER */
-        
-        /* A proper toolbar strip, not floating debris pinned over the title.
-           It sits in normal flow above .header-content, on its own tinted
-           band, so icons never crowd or clash with the hero text below. */
+        /* toggle & counter toolbar, sits above header content */
         .controls-panel {
             position: relative;
             display: flex;
@@ -895,8 +854,7 @@
             margin: 40px auto;
             position: relative;
             min-height: 400px; /* fallback before JS measures the active section */
-            /* Container for sliding panels — only clip the horizontal slide,
-               never clip vertically so tall mobile content stays reachable. */
+            /* clip horizontal slide only, keep vertical visible for mobile */
             overflow-x: hidden;
             overflow-y: visible;
         }
@@ -908,7 +866,7 @@
             border-radius: 12px;
             box-shadow: 0 8px 15px var(--color-shadow);
             
-            /* SLIDING PANEL CSS OVERRIDE */
+            /* sliding panel setup */
             position: absolute; 
             width: 100%;
             top: 0;
@@ -937,7 +895,6 @@
             transform: translateX(100%) !important;
             opacity: 0;
         }
-        /* END SLIDING PANEL CSS */
 
         .section-header {
             display: flex;
@@ -961,9 +918,7 @@
             font-weight: 600;
         }
         
-        /* ========================================= */
         /* MARKETPLACE CARDS */
-        /* ========================================= */
         .market-form {
             background: var(--color-card-bg);
             padding: 24px;
@@ -1085,9 +1040,7 @@
             background: #b71c1c !important;
         }
 
-        /* ========================================= */
         /* 6. LEARNING HUB CARDS & AI INTEGRATION */
-        /* ========================================= */
         .card-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -1190,9 +1143,7 @@
         }
     
         
-        /* ========================================= */
         /* VIDEOS & SCHEMES */
-        /* ========================================= */
         .video-container {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -1242,9 +1193,7 @@
             text-decoration: underline;
         }
 
-        /* ========================================= */
         /* 5. CONTACT PANEL */
-        /* ========================================= */
         #contact {
             background: var(--color-primary);
             color: #fff;
@@ -1316,9 +1265,7 @@
         @keyframes fadeIn { from { bottom: 0; opacity: 0; } to { bottom: 30px; opacity: 1; } }
         /* Note: Fade out is handled by JS removing the 'show' class */
 
-        /* ========================================= */
         /* FOOTER & VISITOR */
-        /* ========================================= */
         footer {
             background: var(--color-navbar-bg);
             color: #fff;
@@ -1346,9 +1293,7 @@
         }
 
 
-        /* ========================================= */
         /* BUY/SELL */
-        /* ========================================= */
         #drawerOverlay {
             position: fixed;
             top: 0;
@@ -1419,9 +1364,7 @@
             }
         }
 
-        /* ========================================= */
         /* RESPONSIVENESS part */
-        /* ========================================= */
         @media (max-width: 768px) {
             :root {
                 --drawer-width: 100%;
@@ -1504,12 +1447,7 @@
                 gap: 10px;
             }
 
-            /* Dropdowns (notifications, language) are normally anchored to
-               the button that opened them via `right: 0`. On a narrow phone
-               those buttons sit well inside the screen, so a 280px-wide
-               dropdown anchored that way runs off the LEFT edge of the
-               viewport and becomes unreachable. Anchor to the viewport
-               instead so it always fits regardless of which button opened it. */
+            /* dropdowns were anchored to their button (right:0) which ran off screen on narrow phones, anchor to viewport instead */
             .notif-dropdown, .lang-menu {
                 position: fixed;
                 top: 52px;
@@ -1520,10 +1458,7 @@
                 max-width: none;
             }
 
-            /* Toast used a hardcoded `right: 30px` with no left bound, so a
-               longer message could push its left edge past the screen edge
-               on a narrow phone. Anchor both sides so it's always
-               contained and centered instead. */
+            /* toast had no left bound so long messages ran off screen, anchor both sides now */
             #toast-message {
                 left: 16px;
                 right: 16px;
@@ -1545,9 +1480,7 @@
             }
         }
         
-        /* ========================================= */
         /* 7. TOOLTIPS part */
-        /* ========================================= */
         .tooltip-container {
             position: relative;
             display: inline-block;
@@ -1574,9 +1507,7 @@
             opacity: 1;
         }
 
-        /* ========================================= */
         /* 8. LEARNING CARDS -> now tappable */
-        /* ========================================= */
         .learning-card {
             cursor: pointer;
             position: relative;
@@ -1596,9 +1527,7 @@
             font-weight: 700;
         }
 
-        /* ========================================= */
         /* 9. EASY LEARNING GUIDE - "hand-made" notebook modal */
-        /* ========================================= */
         #techniqueOverlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
