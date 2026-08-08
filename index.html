@@ -95,13 +95,16 @@
                 <div id="notifDropdown" class="notif-dropdown"></div>
             </div>
             <div class="tooltip-container" id="profileBar">
-                <div class="profile-info">
+                <button class="profile-avatar-btn" id="profileAvatarBtn" aria-label="Account menu" aria-haspopup="true">
                     <div class="profile-avatar" id="profileAvatar"></div>
-                    <div class="profile-text">
+                </button>
+                <span class="tooltip-text">Account</span>
+                <div class="profile-dropdown" id="profileDropdown">
+                    <div class="profile-dropdown-info">
                         <span id="profileName"></span>
                         <span id="profileRole"></span>
                     </div>
-                    <button id="logoutBtn" aria-label="Logout"><i class="fas fa-right-from-bracket"></i></button>
+                    <button id="logoutBtn" aria-label="Logout"><i class="fas fa-right-from-bracket"></i> Logout</button>
                 </div>
             </div>
             <div class="tooltip-container">
