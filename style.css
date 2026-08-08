@@ -32,6 +32,24 @@
             box-sizing: border-box;
         }
 
+        html, body {
+            /* Safety net: nothing on the page should be able to force a
+               horizontal scrollbar on mobile. */
+            overflow-x: hidden;
+            width: 100%;
+        }
+        img, iframe, video {
+            max-width: 100%;
+        }
+        @media (max-width: 700px) {
+            body {
+                /* background-attachment:fixed is unreliable/janky on many
+                   mobile browsers (notably iOS Safari) — fall back to a
+                   normal scrolling background there. */
+                background-attachment: scroll;
+            }
+        }
+
         /* ========================================= */
         /* LOGIN / ROLE SELECTION OVERLAY */
         /* ========================================= */
@@ -141,7 +159,7 @@
             border: 1px solid var(--color-card-border);
             background: var(--color-background);
             color: var(--color-text);
-            font-size: 15px;
+            font-size: 16px;
         }
         #farmerPhotoPreview {
             display: block;
@@ -375,6 +393,12 @@
         body.role-farmer button.farmer-only,
         body.role-buyer button.buyer-only {
             display: inline-block;
+        }
+        /* nav links use flex (icon + label) — keep that instead of falling
+           back to the generic block display above */
+        body.role-farmer a.nav-link.farmer-only,
+        body.role-buyer a.nav-link.buyer-only {
+            display: flex;
         }
 
         /* ========================================= */
@@ -664,9 +688,11 @@
             max-width: 1200px;
             margin: 40px auto;
             position: relative;
-            min-height: 800px;
-            /* Container for sliding panels */
-            overflow: hidden; 
+            min-height: 400px; /* fallback before JS measures the active section */
+            /* Container for sliding panels — only clip the horizontal slide,
+               never clip vertically so tall mobile content stays reachable. */
+            overflow-x: hidden;
+            overflow-y: visible;
         }
         
         section {
@@ -1158,7 +1184,93 @@
             }
             .container {
                 margin: 20px auto;
-                min-height: 1000px; /* Increase min-height for mobile layouts */
+                padding: 12px;
+            }
+        }
+
+        /* Narrower phones: minmax(280px,...) grid tracks don't fit once
+           container/section padding is subtracted from a ~320-400px
+           viewport, which silently overflows the page horizontally.
+           Force a single column instead so cards always fit. */
+        @media (max-width: 560px) {
+            .card-grid, .video-container {
+                grid-template-columns: 1fr;
+            }
+            section {
+                padding: 16px;
+            }
+            .listing-item {
+                flex-wrap: wrap;
+            }
+            .listing-item .buy-controls {
+                width: 100%;
+                justify-content: flex-end;
+                margin-top: 6px;
+            }
+            .role-cards {
+                grid-template-columns: 1fr;
+            }
+            .controls-panel {
+                gap: 6px;
+                top: 8px;
+                right: 8px;
+            }
+            .theme-toggle, .lang-toggle, .tts-button, .notif-bell-btn {
+                padding: 6px 9px;
+                font-size: 14px;
+            }
+            .header-content {
+                padding: 50px 12px 16px;
+            }
+            .header-content h1 {
+                font-size: 1.5em;
+            }
+            .header-content p {
+                font-size: 0.85em;
+            }
+            .section-header {
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+
+            /* Dropdowns (notifications, language) are normally anchored to
+               the button that opened them via `right: 0`. On a narrow phone
+               those buttons sit well inside the screen, so a 280px-wide
+               dropdown anchored that way runs off the LEFT edge of the
+               viewport and becomes unreachable. Anchor to the viewport
+               instead so it always fits regardless of which button opened it. */
+            .notif-dropdown, .lang-menu {
+                position: fixed;
+                top: 58px;
+                left: 10px;
+                right: 10px;
+                width: auto;
+                min-width: 0;
+                max-width: none;
+            }
+
+            /* Toast used a hardcoded `right: 30px` with no left bound, so a
+               longer message could push its left edge past the screen edge
+               on a narrow phone. Anchor both sides so it's always
+               contained and centered instead. */
+            #toast-message {
+                left: 16px;
+                right: 16px;
+                bottom: 16px;
+                min-width: 0;
+                width: auto;
+            }
+            @keyframes fadeIn { from { bottom: -16px; opacity: 0; } to { bottom: 16px; opacity: 1; } }
+
+            #ai-recommendation {
+                padding: 18px;
+                margin-top: 24px;
+            }
+            #loginModal {
+                padding: 26px 18px;
+            }
+            .role-card {
+                padding: 18px 12px;
             }
         }
         
