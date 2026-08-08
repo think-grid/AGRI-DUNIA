@@ -524,9 +524,8 @@
 
         /* farmer-written blurb on a listing (irrigation notes, variety, harvest date, etc.) */
         .product-description {
-            font-size: 1em;
+            font-size: 1.15em;
             color: var(--color-text);
-            opacity: 0.8;
             margin: 4px 0;
         }
 
