@@ -207,7 +207,11 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             /* AUTH / LOGIN SYSTEM — Farmer vs Buyer                 */
             /* ===================================================== */
             const AUTH_STORAGE_KEY = 'agriUserProfile';
-            const NOTIF_STORAGE_KEY = 'agriFarmerNotifications';
+            // NOTE: farmer purchase notifications used to be tracked here via
+            // NOTIF_STORAGE_KEY (localStorage), but that only worked on the same
+            // device/browser the purchase happened on. They now live in Firestore
+            // ("farmerNotifications" collection, see firebase.js) so they sync
+            // across every device.
             // Declared early so functions that read it (e.g. renderNotifications, called from
             // initAuth on page load) never run before it's initialized.
             let currentLang = 'en';
@@ -355,6 +359,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 updateWelcomeAndProfile(user);
                 renderProductListings();
                 renderNotifications();
+                renderPurchases();
+                renderFarmerMessages();
                 showToast(`Welcome ${user.name}! You're logged in as a ${user.role}.`, true);
             }
 
@@ -416,6 +422,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                             updateWelcomeAndProfile(user);
                             renderProductListings();
                             renderNotifications();
+                            renderPurchases();
+                            renderFarmerMessages();
                             return;
                         }
                     } catch (e) {
@@ -694,7 +702,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     `${buyerName} ने आपके ${product.name} की ${requestedQty} इकाइयाँ खरीदीं।`
                 );
 
-                addToCart(product.name, requestedQty, product.price, product.id);
+                addToCart(product.name, requestedQty, product.price, product.id, product.farmerName);
             };
 
             function renderProductListings() {
@@ -707,15 +715,19 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     if (mine.length === 0) {
                         myListingsItems.innerHTML = `<p>You haven't listed any products yet.</p>`;
                     } else {
-                        myListingsItems.innerHTML = mine.map(p => `
+                        myListingsItems.innerHTML = mine.map(p => {
+                            const rating = getProductRating(p.id);
+                            return `
                             <div class="listing-item">
                                 <div class="listing-item-content">
                                     ${p.image ? `<img src="${p.image}" alt="${p.name}" class="listing-item-thumb">` : ''}
-                                    <span>${p.category ? `<span class="category-badge">${CATEGORY_ICONS[p.category] || ''} ${p.category}</span>` : ''}<strong>${p.name}</strong> — ${p.qty > 0 ? `${p.qty} units left` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}</span>
+                                    <span>${p.category ? `<span class="category-badge">${CATEGORY_ICONS[p.category] || ''} ${p.category}</span>` : ''}<strong>${p.name}</strong> — ${p.qty > 0 ? `${p.qty} units left` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}
+                                    ${rating ? `<br><span class="rating-badge">${starsHtml(rating.avg)} ${rating.avg.toFixed(1)} (${rating.count})</span>` : ''}</span>
                                 </div>
                                 <button class="remove-btn" onclick="removeProductListing('${p.id}')"><i class="fas fa-trash-alt"></i> Remove</button>
                             </div>
-                        `).join('');
+                        `;
+                        }).join('');
                     }
                 }
 
@@ -724,11 +736,14 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     if (products.length === 0) {
                         availableProductsItems.innerHTML = `<p>No products listed yet. Check back soon!</p>`;
                     } else {
-                        availableProductsItems.innerHTML = products.map(p => `
+                        availableProductsItems.innerHTML = products.map(p => {
+                            const rating = getProductRating(p.id);
+                            return `
                             <div class="listing-item">
                                 <div class="listing-item-content">
                                     ${p.image ? `<img src="${p.image}" alt="${p.name}" class="listing-item-thumb">` : ''}
                                     <span>${p.category ? `<span class="category-badge">${CATEGORY_ICONS[p.category] || ''} ${p.category}</span>` : ''}<strong>${p.name}</strong> — ${p.qty > 0 ? `${p.qty} units available` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}<br>
+                                    ${rating ? `<span class="rating-badge">${starsHtml(rating.avg)} ${rating.avg.toFixed(1)} (${rating.count})</span><br>` : ''}
                                     <small>Sold by ${p.farmerName}${p.farmerPlace ? ', ' + p.farmerPlace : ''}</small></span>
                                 </div>
                                 ${p.qty > 0 ? `
@@ -737,7 +752,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                                     <button onclick="buyProductListing('${p.id}')"><i class="fas fa-cart-plus"></i> Add to Cart</button>
                                 </div>` : ''}
                             </div>
-                        `).join('');
+                        `;
+                        }).join('');
                     }
                 }
             }
@@ -751,31 +767,13 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             const notifBadge = document.getElementById('notifBadge');
             const notifDropdown = document.getElementById('notifDropdown');
 
-            function loadNotifications() {
-                try {
-                    return JSON.parse(localStorage.getItem(NOTIF_STORAGE_KEY)) || {};
-                } catch (e) {
-                    return {};
-                }
-            }
-
-            function saveNotifications(data) {
-                localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(data));
-            }
-
-            function addFarmerNotification(farmerName, textByLang) {
-                const all = loadNotifications();
-                if (!all[farmerName]) all[farmerName] = [];
-                all[farmerName].unshift({
-                    id: Date.now() + Math.random().toString(16).slice(2),
-                    ...textByLang,
-                    time: Date.now(),
-                    read: false
-                });
-                saveNotifications(all);
-                if (currentUser && currentUser.role === 'farmer' && currentUser.name === farmerName) {
-                    renderNotifications();
-                }
+            function addFarmerNotification(farmerName, textEn, textHi) {
+                if (typeof window.fbAddNotification !== 'function') return;
+                window.fbAddNotification({
+                    farmerName,
+                    en: textEn,
+                    hi: textHi || textEn
+                }).catch(err => console.error('Failed to send notification:', err));
             }
 
             function timeAgo(ts) {
@@ -793,8 +791,9 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     notifBadge.style.display = 'none';
                     return;
                 }
-                const all = loadNotifications();
-                const mine = all[currentUser.name] || [];
+                const mine = (window.__agriLatestNotifications || [])
+                    .filter(n => n.farmerName === currentUser.name)
+                    .sort((a, b) => b.createdAt - a.createdAt);
                 const unreadCount = mine.filter(n => !n.read).length;
 
                 notifBadge.textContent = unreadCount > 9 ? '9+' : unreadCount;
@@ -806,7 +805,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     notifDropdown.innerHTML = mine.map(n => `
                         <div class="notif-item ${n.read ? '' : 'unread'}">
                             ${n[currentLang] || n.en}
-                            <span class="notif-time">${timeAgo(n.time)}</span>
+                            <span class="notif-time">${timeAgo(n.createdAt)}</span>
                         </div>
                     `).join('');
                 }
@@ -814,13 +813,21 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
 
             function markFarmerNotificationsRead() {
                 if (!currentUser || currentUser.role !== 'farmer') return;
-                const all = loadNotifications();
-                const mine = all[currentUser.name] || [];
-                if (mine.length === 0) return;
-                mine.forEach(n => n.read = true);
-                all[currentUser.name] = mine;
-                saveNotifications(all);
+                const unreadIds = (window.__agriLatestNotifications || [])
+                    .filter(n => n.farmerName === currentUser.name && !n.read)
+                    .map(n => n.id);
+                if (unreadIds.length === 0) return;
+                if (typeof window.fbMarkNotificationsRead === 'function') {
+                    window.fbMarkNotificationsRead(unreadIds).catch(err => console.error('Failed to mark notifications read:', err));
+                }
             }
+
+            // Firestore listener fires this on every notification change — new
+            // purchase, or a read-state update — from ANY device the farmer (or a
+            // buyer buying from them) is using.
+            window.onNotificationsUpdated = function () {
+                renderNotifications();
+            };
 
             if (notifBellBtn) {
                 notifBellBtn.addEventListener('click', (e) => {
@@ -842,6 +849,258 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 });
             }
             /* ================= END FARMER NOTIFICATIONS ================= */
+
+            /* ===================================================== */
+            /* BUYER PURCHASES — review a product / message the farmer */
+            /* ===================================================== */
+            // Purchase records are kept locally per-buyer (same pattern as farmer
+            // notifications above) since they're just "what did *I* buy" — the
+            // review and message content itself is what needs to sync to the
+            // farmer, and that goes through Firestore (fbAddReview / fbAddMessage).
+            const PURCHASE_STORAGE_KEY = 'agriBuyerPurchases';
+
+            function loadPurchases() {
+                try {
+                    return JSON.parse(localStorage.getItem(PURCHASE_STORAGE_KEY)) || {};
+                } catch (e) {
+                    return {};
+                }
+            }
+
+            function savePurchases(data) {
+                localStorage.setItem(PURCHASE_STORAGE_KEY, JSON.stringify(data));
+            }
+
+            function recordPurchase(item) {
+                if (!currentUser || currentUser.role !== 'buyer') return;
+                const all = loadPurchases();
+                if (!all[currentUser.name]) all[currentUser.name] = [];
+                all[currentUser.name].unshift({
+                    id: Date.now() + Math.random().toString(16).slice(2),
+                    productId: item.productId,
+                    name: item.name,
+                    farmerName: item.farmerName,
+                    qty: item.qty,
+                    price: item.price,
+                    time: Date.now()
+                });
+                savePurchases(all);
+            }
+
+            // Tracks which purchase currently has an open review/message form so a
+            // background Firestore snapshot doesn't wipe out text mid-typing.
+            let openPurchaseForm = null;
+
+            function getProductRating(productId) {
+                const reviews = (window.__agriLatestReviews || []).filter(r => r.productId === productId);
+                if (reviews.length === 0) return null;
+                const avg = reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
+                return { avg, count: reviews.length };
+            }
+
+            function starsHtml(value, max = 5) {
+                let html = '';
+                for (let i = 1; i <= max; i++) {
+                    html += `<i class="fa-star ${i <= Math.round(value) ? 'fas' : 'far'}"></i>`;
+                }
+                return html;
+            }
+
+            function renderPurchases() {
+                const container = document.getElementById('myPurchasesItems');
+                if (!container || !currentUser || currentUser.role !== 'buyer') return;
+
+                const all = loadPurchases();
+                const mine = all[currentUser.name] || [];
+
+                if (mine.length === 0) {
+                    container.innerHTML = `<p>You haven't bought anything yet.</p>`;
+                    return;
+                }
+
+                const myReviews = (window.__agriLatestReviews || []).filter(r => r.buyerName === currentUser.name);
+                const myMessages = (window.__agriLatestMessages || []).filter(m => m.buyerName === currentUser.name);
+
+                container.innerHTML = mine.map(p => {
+                    const existingReview = myReviews.find(r => r.productId === p.productId);
+                    const threadMessages = myMessages
+                        .filter(m => m.farmerName === p.farmerName)
+                        .sort((a, b) => a.createdAt - b.createdAt);
+
+                    const reviewOpen = openPurchaseForm === `review-${p.id}`;
+                    const msgOpen = openPurchaseForm === `message-${p.id}`;
+
+                    return `
+                        <div class="purchase-item">
+                            <div class="listing-item-content">
+                                <span>
+                                    <strong>${p.name}</strong> — ${p.qty} units × ₹${p.price.toFixed(2)}<br>
+                                    <small>Bought from ${p.farmerName} · ${timeAgo(p.time)}</small>
+                                </span>
+                            </div>
+
+                            <div class="purchase-actions">
+                                <button onclick="toggleReviewForm('${p.id}')"><i class="fas fa-star"></i> ${existingReview ? 'Update Review' : 'Leave a Review'}</button>
+                                <button onclick="toggleMessageForm('${p.id}')"><i class="fas fa-envelope"></i> Message Farmer</button>
+                            </div>
+
+                            ${existingReview && !reviewOpen ? `
+                                <div class="review-readonly">
+                                    <span class="star-rating-display">${starsHtml(existingReview.rating)}</span>
+                                    ${existingReview.comment ? `<p>${existingReview.comment}</p>` : ''}
+                                </div>
+                            ` : ''}
+
+                            <div class="review-panel" style="display:${reviewOpen ? 'block' : 'none'};">
+                                <div class="star-rating" id="starRating-${p.id}" data-value="${existingReview ? existingReview.rating : 0}">
+                                    ${[1,2,3,4,5].map(n => `<i class="${existingReview && n <= existingReview.rating ? 'fas' : 'far'} fa-star" onclick="setReviewRating('${p.id}', ${n})"></i>`).join('')}
+                                </div>
+                                <textarea id="reviewComment-${p.id}" rows="2" placeholder="What did you think of this product? (optional)">${existingReview ? (existingReview.comment || '') : ''}</textarea>
+                                <button onclick="submitReview('${p.id}')">Submit Review</button>
+                            </div>
+
+                            <div class="message-panel" style="display:${msgOpen ? 'block' : 'none'};">
+                                ${threadMessages.length > 0 ? `
+                                    <div class="message-thread">
+                                        ${threadMessages.map(m => `<div class="message-bubble-buyer">${m.text}<span class="message-time">${timeAgo(m.createdAt)}</span></div>`).join('')}
+                                    </div>
+                                ` : ''}
+                                <textarea id="messageText-${p.id}" rows="2" placeholder="Ask ${p.farmerName} a question about your order..."></textarea>
+                                <button onclick="submitMessage('${p.id}')">Send Message</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            window.toggleReviewForm = function (purchaseId) {
+                const key = `review-${purchaseId}`;
+                openPurchaseForm = (openPurchaseForm === key) ? null : key;
+                renderPurchases();
+            };
+
+            window.toggleMessageForm = function (purchaseId) {
+                const key = `message-${purchaseId}`;
+                openPurchaseForm = (openPurchaseForm === key) ? null : key;
+                renderPurchases();
+            };
+
+            window.setReviewRating = function (purchaseId, value) {
+                const el = document.getElementById(`starRating-${purchaseId}`);
+                if (!el) return;
+                el.setAttribute('data-value', value);
+                Array.from(el.children).forEach((star, i) => {
+                    star.className = (i < value ? 'fas' : 'far') + ' fa-star';
+                });
+            };
+
+            window.submitReview = async function (purchaseId) {
+                if (!currentUser || currentUser.role !== 'buyer') return;
+                const all = loadPurchases();
+                const mine = all[currentUser.name] || [];
+                const purchase = mine.find(p => p.id === purchaseId);
+                if (!purchase) return;
+
+                const ratingEl = document.getElementById(`starRating-${purchaseId}`);
+                const rating = ratingEl ? parseInt(ratingEl.getAttribute('data-value')) : 0;
+                if (!rating || rating < 1 || rating > 5) {
+                    showToast('Please select a star rating first.', false);
+                    return;
+                }
+                const commentEl = document.getElementById(`reviewComment-${purchaseId}`);
+                const comment = commentEl ? commentEl.value.trim() : '';
+
+                if (typeof window.fbAddReview !== 'function') {
+                    showToast('Reviews are unavailable right now — please try again in a moment.', false);
+                    return;
+                }
+                try {
+                    await window.fbAddReview({
+                        productId: purchase.productId,
+                        productName: purchase.name,
+                        farmerName: purchase.farmerName,
+                        buyerName: currentUser.name,
+                        rating,
+                        comment
+                    });
+                    showToast('Thanks for your review!', true);
+                    openPurchaseForm = null;
+                    renderPurchases();
+                    renderProductListings();
+                } catch (err) {
+                    console.error('Failed to submit review:', err);
+                    showToast('Could not submit your review. Please try again.', false);
+                }
+            };
+
+            window.submitMessage = async function (purchaseId) {
+                if (!currentUser || currentUser.role !== 'buyer') return;
+                const all = loadPurchases();
+                const mine = all[currentUser.name] || [];
+                const purchase = mine.find(p => p.id === purchaseId);
+                if (!purchase) return;
+
+                const textEl = document.getElementById(`messageText-${purchaseId}`);
+                const text = textEl ? textEl.value.trim() : '';
+                if (!text) {
+                    showToast('Please write a message first.', false);
+                    return;
+                }
+
+                if (typeof window.fbAddMessage !== 'function') {
+                    showToast('Messaging is unavailable right now — please try again in a moment.', false);
+                    return;
+                }
+                try {
+                    await window.fbAddMessage({
+                        farmerName: purchase.farmerName,
+                        buyerName: currentUser.name,
+                        productName: purchase.name,
+                        text
+                    });
+                    showToast(`Message sent to ${purchase.farmerName}.`, true);
+                    renderPurchases();
+                } catch (err) {
+                    console.error('Failed to send message:', err);
+                    showToast('Could not send your message. Please try again.', false);
+                }
+            };
+
+            function renderFarmerMessages() {
+                const container = document.getElementById('farmerMessagesItems');
+                if (!container || !currentUser || currentUser.role !== 'farmer') return;
+
+                const mine = (window.__agriLatestMessages || [])
+                    .filter(m => m.farmerName === currentUser.name)
+                    .sort((a, b) => b.createdAt - a.createdAt);
+
+                if (mine.length === 0) {
+                    container.innerHTML = `<p>No messages yet.</p>`;
+                    return;
+                }
+
+                container.innerHTML = mine.map(m => `
+                    <div class="farmer-message-item">
+                        <div>
+                            <strong>${m.buyerName}</strong> ${m.productName ? `<span class="category-badge">about ${m.productName}</span>` : ''}
+                            <span class="message-time">${timeAgo(m.createdAt)}</span>
+                        </div>
+                        <p>${m.text}</p>
+                    </div>
+                `).join('');
+            }
+
+            // Both listeners are wired here (in addition to onProductsUpdated above)
+            // so reviews/messages update live across devices, same as listings.
+            window.onReviewsUpdated = function () {
+                renderProductListings();
+                if (!openPurchaseForm) renderPurchases();
+            };
+            window.onMessagesUpdated = function () {
+                renderFarmerMessages();
+                if (!openPurchaseForm) renderPurchases();
+            };
+            /* ================= END BUYER PURCHASES ================= */
 
 
             let cart = []; 
@@ -875,12 +1134,12 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 `;
             }
 
-            function addToCart(name, qty, price, productId = null) {
+            function addToCart(name, qty, price, productId = null, farmerName = null) {
                 if (!name || isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
                     showToast(translations[currentLang]['toast-error-fields'], false);
                     return;
                 }
-                cart.push({ name, qty: parseInt(qty), price: parseFloat(price), productId });
+                cart.push({ name, qty: parseInt(qty), price: parseFloat(price), productId, farmerName });
                 showToast(translations[currentLang]['alert-cart-add'](name), true);
                 displayCart();
             }
@@ -913,8 +1172,19 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 
                 setTimeout(() => {
                     showToast(translations[currentLang]['alert-pay-success'](amount), true);
+                    // Record each real (farmer-listed) item as a completed purchase so
+                    // the buyer can review it / message the farmer from "My Purchases".
+                    // Manually-typed Quick Buy items have no productId/farmerName behind
+                    // them (they're not a real listing), so there's no farmer to review
+                    // or message — skip those.
+                    cart.forEach(item => {
+                        if (item.productId && item.farmerName) {
+                            recordPurchase(item);
+                        }
+                    });
                     cart = [];
                     displayCart();
+                    renderPurchases();
                 }, 1500); 
             }
 
