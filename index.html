@@ -7,16 +7,14 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-     <link rel="stylesheet" href="style.css">
-     <script type="module" src="firebase.js"></script>
-     <script src="contents.js"></script>
-     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <link rel="stylesheet" href="style.css">
+    <script type="module" src="firebase.js"></script>
+    <script src="contents.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
-    <!-- ============================================================ -->
-    <!-- LOGIN / ROLE SELECTION OVERLAY -->
-    <!-- ============================================================ -->
+    <!-- login / role select -->
     <div id="loginOverlay">
         <div id="loginModal" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle">
             <div class="login-brand">
@@ -79,7 +77,6 @@
             </form>
         </div>
     </div>
-    <!-- END LOGIN / ROLE SELECTION OVERLAY -->
 
     <div id="mainAppTop">
     <div id="welcome-banner">Welcome Farmer <i class="fa-solid fa-seedling"></i></div>
@@ -170,7 +167,7 @@
                 </div>
             </div>
 
-            <!--  QUICK BUY/SELL BUTTONS will be here -->
+            <!-- quick buy/sell buttons -->
             <div style="text-align: center; margin-top: 30px;">
                 <button id="openQuickSell" class="farmer-only" style="background: var(--color-secondary); color: white; padding: 10px 20px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-right: 10px; transition: transform 0.2s;">
                     <i class="fas fa-arrow-up"></i> Quick Sell
@@ -179,9 +176,7 @@
                     <i class="fas fa-shopping-basket"></i> Quick Buy
                 </button>
             </div>
-            <!-- END  QUICK BUY/SELL BUTTONS will be -->
-
-            <!-- BUYER: Available Products from Farmers -->
+            <!-- available products for buyers -->
             <div id="availableProductsSection" class="buyer-only listings-panel">
                 <h2><i class="fas fa-store"></i> Products Available to Buy</h2>
                 <div id="availableProductsItems"><p>No products listed yet. Check back soon!</p></div>
@@ -194,7 +189,7 @@
         </section>
 
         <!-- My Products Section (Farmer only) -->
-        <section id="myproducts" class="farmer-only">
+        <section id="myproducts">
             <div class="section-header">
                 <h2 data-key="sec-myproducts-title">My Products</h2>
                 <div class="tooltip-container">
@@ -210,7 +205,7 @@
         </section>
 
         <!-- Messages Section (Farmer only) — one-way inbox of buyer messages -->
-        <section id="messages" class="farmer-only">
+        <section id="messages">
             <div class="section-header">
                 <h2>Messages from Buyers</h2>
             </div>
@@ -222,7 +217,7 @@
         </section>
 
         <!-- My Purchases Section (Buyer only) — review + message the farmer -->
-        <section id="mypurchases" class="buyer-only">
+        <section id="mypurchases">
             <div class="section-header">
                 <h2>My Purchases</h2>
             </div>
@@ -233,7 +228,7 @@
             </div>
         </section>
 
-        <!-- Learning Hub Section fr -->
+        <!-- Learning Hub Section -->
         <section id="learning">
             <div class="section-header">
                 <h2 data-key="sec-learning-title">Learning Hub</h2>
@@ -312,7 +307,7 @@
             </div>
         </section>
 
-        <!-- Schemes Section should be  -->
+        <!-- Schemes Section -->
         <section id="schemes">
             <div class="section-header">
                 <h2 data-key="sec-scheme-title">Government Schemes for Farmers</h2>
@@ -332,8 +327,7 @@
             </ul>
         </section>
 
-        <!-- Contact Section 
-         i should also add better gmail id -->
+        <!-- Contact Section -->
         <section id="contact">
             <div class="section-header">
                 <h2 data-key="sec-contact-title">Contact Us</h2>
@@ -342,7 +336,7 @@
                     <span class="tooltip-text">Text-to-Speech</span>
                 </div>
             </div>
-            <p data-key="contact-info-1">Email:thinkgridquiz@gmail.com</p>
+            <p data-key="contact-info-1">Email: support@farmerplatform.in</p>
             <p data-key="contact-info-2">Helpline: +91 7393953233</p>
             
             <form class="contact-form" id="contactForm" aria-label="Contact Form">
@@ -360,11 +354,10 @@
         </section>
     </div>
     </div>
-    <!-- END mainAppTop -->
 
     <div id="toast-message"></div>
 
-    <!-- NEW DRAWER/MODAL STRUCTURE -->
+    <!-- quick buy/sell drawer -->
     <div id="drawerOverlay" onclick="closeDrawer()"></div>
     <div id="buySellDrawer">
         <button class="close-button" onclick="closeDrawer()"><i class="fas fa-times"></i></button>
@@ -393,9 +386,8 @@
             Note: This quick panel is for demonstration. All items are added to your local cart.
         </p>
     </div>
-    <!-- END NEW DRAWER/MODAL STRUCTURE -->
 
-    <!-- EASY LEARNING GUIDE MODAL - looks like a hand-made notebook page -->
+    <!-- learning guide modal, looks like a notebook page -->
     <div id="techniqueOverlay" onclick="closeTechniqueModal()"></div>
     <div id="techniqueModal" role="dialog" aria-modal="true" aria-labelledby="techniqueModalTitle">
         <div class="pin" aria-hidden="true"></div>
@@ -419,8 +411,6 @@
 
         <div id="techniqueTip" class="technique-tip"></div>
     </div>
-    <!-- END EASY LEARNING GUIDE MODAL -->
-
 
     <div id="mainAppFooter">
     <footer>
