@@ -572,7 +572,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 return fallback;
             }
 
-            async function addProductListing(name, qty, price, imageDataUrl, category) {
+            async function addProductListing(name, qty, price, imageDataUrl, category, description = '') {
                 if (!currentUser || currentUser.role !== 'farmer') return;
                 if (!name || isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
                     showToast(translations[currentLang]['toast-error-fields'], false);
@@ -602,7 +602,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                         farmerName: currentUser.name,
                         farmerPlace: currentUser.place || '',
                         image: imageDataUrl,
-                        category
+                        category,
+                        description: (description || '').trim()
                     });
                     // No need to call renderProductListings() here — the Firestore
                     // onSnapshot listener in firebase.js will fire onProductsUpdated
@@ -688,7 +689,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                                 <div class="listing-item-content">
                                     ${p.image ? `<img src="${p.image}" alt="${name}" class="listing-item-thumb">` : ''}
                                     <span>${p.category ? `<span class="category-badge">${CATEGORY_ICONS[p.category] || ''} ${escapeHtml(p.category)}</span>` : ''}<strong>${name}</strong> — ${p.qty > 0 ? `${p.qty} units left` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}
-                                    ${rating ? `<br><span class="rating-badge">${starsHtml(rating.avg)} ${rating.avg.toFixed(1)} (${rating.count})</span>` : ''}</span>
+                                    ${rating ? `<br><span class="rating-badge">${starsHtml(rating.avg)} ${rating.avg.toFixed(1)} (${rating.count})</span>` : ''}
+                                    ${p.description ? `<p class="product-description">${escapeHtml(p.description)}</p>` : ''}</span>
                                 </div>
                                 <button class="remove-btn" onclick="removeProductListing('${p.id}')"><i class="fas fa-trash-alt"></i> Remove</button>
                             </div>
@@ -713,6 +715,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                                     ${p.image ? `<img src="${p.image}" alt="${name}" class="listing-item-thumb">` : ''}
                                     <span>${p.category ? `<span class="category-badge">${CATEGORY_ICONS[p.category] || ''} ${escapeHtml(p.category)}</span>` : ''}<strong>${name}</strong> — ${p.qty > 0 ? `${p.qty} units available` : `<span style="color:#d32f2f;">Sold Out</span>`} × ₹${p.price.toFixed(2)}<br>
                                     ${rating ? `<span class="rating-badge">${starsHtml(rating.avg)} ${rating.avg.toFixed(1)} (${rating.count})</span><br>` : ''}
+                                    ${p.description ? `<p class="product-description">${escapeHtml(p.description)}</p>` : ''}
                                     <small>Sold by ${farmerName}${p.farmerPlace ? ', ' + farmerPlace : ''}</small></span>
                                 </div>
                                 ${p.qty > 0 ? `
@@ -2077,6 +2080,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 const qty = document.getElementById('sellQty').value;
                 const price = document.getElementById('sellPrice').value;
                 const category = document.getElementById('sellCategory').value;
+                const description = document.getElementById('sellDescription').value.trim();
                 if (!ALLOWED_PRODUCT_CATEGORIES.includes(category)) {
                     showToast(translations[currentLang]['toast-error-category'], false);
                     return;
@@ -2085,11 +2089,12 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     showToast(translations[currentLang]['toast-error-image'], false);
                     return;
                 }
-                addProductListing(name, qty, price, sellImageDataUrl, category);
+                addProductListing(name, qty, price, sellImageDataUrl, category, description);
                 document.getElementById('sellName').value = "";
                 document.getElementById('sellQty').value = "";
                 document.getElementById('sellPrice').value = "";
                 document.getElementById('sellCategory').value = "";
+                document.getElementById('sellDescription').value = "";
                 sellImageInput.value = "";
                 sellImageDataUrl = '';
                 sellImagePreview.style.display = 'none';
@@ -2127,6 +2132,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             const drawerImagePreview = document.getElementById('drawerImagePreview');
             const drawerCategoryLabel = document.getElementById('drawerCategoryLabel');
             const drawerCategorySelect = document.getElementById('drawerCategory');
+            const drawerDescriptionLabel = document.getElementById('drawerDescriptionLabel');
+            const drawerDescriptionInput = document.getElementById('drawerDescription');
             let drawerImageDataUrl = '';
 
             drawerImageInput.addEventListener('change', async () => {
@@ -2158,6 +2165,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 drawerPriceInput.style.display = isBuy ? 'none' : 'block';
                 drawerCategoryLabel.style.display = isBuy ? 'none' : 'block';
                 drawerCategorySelect.style.display = isBuy ? 'none' : 'block';
+                drawerDescriptionLabel.style.display = isBuy ? 'none' : 'block';
+                drawerDescriptionInput.style.display = isBuy ? 'none' : 'block';
                 drawerImageLabel.style.display = isBuy ? 'none' : 'block';
                 drawerImageInput.style.display = isBuy ? 'none' : 'block';
                 drawerActionBtn.textContent = isBuy ? 'Add Mock Item to Cart' : 'Post & Add to Cart';
@@ -2176,6 +2185,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 document.getElementById('drawerQty').value = '';
                 drawerPriceInput.value = '';
                 drawerCategorySelect.value = '';
+                drawerDescriptionInput.value = '';
                 drawerImageInput.value = '';
                 drawerImageDataUrl = '';
                 drawerImagePreview.style.display = 'none';
@@ -2212,7 +2222,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                         showToast(translations[currentLang]['toast-error-image'], false);
                         return;
                     }
-                    addProductListing(name, qty, price, drawerImageDataUrl, category);
+                    const description = drawerDescriptionInput.value.trim();
+                    addProductListing(name, qty, price, drawerImageDataUrl, category, description);
                 } else {
                     const price = 100; // Default price for mock buy
                     addToCart(name, qty, price);
