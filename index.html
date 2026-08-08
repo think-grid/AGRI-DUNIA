@@ -130,6 +130,8 @@
     <nav class="navbar">
         <a href="#marketplace" class="nav-link active" data-target="marketplace" data-key="nav-market" aria-label="Go to Digital Marketplace section"><i class="fas fa-store"></i> Marketplace</a>
         <a href="#myproducts" class="nav-link farmer-only" data-target="myproducts" data-key="nav-myproducts" aria-label="Go to My Products section"><i class="fas fa-boxes-stacked"></i> My Products</a>
+        <a href="#messages" class="nav-link farmer-only" data-target="messages" aria-label="Go to Messages section"><i class="fas fa-envelope-open-text"></i> Messages</a>
+        <a href="#mypurchases" class="nav-link buyer-only" data-target="mypurchases" aria-label="Go to My Purchases section"><i class="fas fa-receipt"></i> My Purchases</a>
         <a href="#learning" class="nav-link" data-target="learning" data-key="nav-learning" aria-label="Go to Learning Hub section"><i class="fas fa-graduation-cap"></i> Learning Hub</a>
         <a href="#videos" class="nav-link" data-target="videos" data-key="nav-videos" aria-label="Go to Videos for Farmers section"><i class="fas fa-video"></i> Videos</a>
         <a href="#schemes" class="nav-link" data-target="schemes" data-key="nav-schemes" aria-label="Go to Government Schemes section"><i class="fas fa-hands-helping"></i> Schemes</a>
@@ -204,6 +206,30 @@
 
             <div id="myListingsSection" class="listings-panel">
                 <div id="myListingsItems"><p>You haven't listed any products yet.</p></div>
+            </div>
+        </section>
+
+        <!-- Messages Section (Farmer only) — one-way inbox of buyer messages -->
+        <section id="messages">
+            <div class="section-header">
+                <h2>Messages from Buyers</h2>
+            </div>
+            <p>Notes buyers have sent you about your products.</p>
+
+            <div id="farmerMessagesSection" class="listings-panel">
+                <div id="farmerMessagesItems"><p>No messages yet.</p></div>
+            </div>
+        </section>
+
+        <!-- My Purchases Section (Buyer only) — review + message the farmer -->
+        <section id="mypurchases">
+            <div class="section-header">
+                <h2>My Purchases</h2>
+            </div>
+            <p>Products you've bought. Leave a review or send the farmer a message about your order.</p>
+
+            <div id="myPurchasesSection" class="listings-panel">
+                <div id="myPurchasesItems"><p>You haven't bought anything yet.</p></div>
             </div>
         </section>
 
