@@ -532,6 +532,135 @@
             white-space: nowrap;
         }
 
+        /* ========================================= */
+        /* PRODUCT RATINGS (average stars on listings) */
+        /* ========================================= */
+        .rating-badge {
+            display: inline-block;
+            font-size: 0.85em;
+            color: var(--color-text);
+            margin-top: 4px;
+        }
+        .rating-badge .fa-star {
+            color: #f5a623;
+            font-size: 0.9em;
+        }
+
+        /* ========================================= */
+        /* BUYER PURCHASES — reviews & farmer messages */
+        /* ========================================= */
+        .purchase-item {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: var(--color-background);
+            border: 1px solid var(--color-card-border);
+            border-left: 4px solid var(--color-primary);
+            border-radius: 8px;
+            padding: 12px 14px;
+            margin: 10px 0;
+        }
+        .purchase-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .purchase-actions button {
+            background: var(--color-primary);
+            color: #fff;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+        .purchase-actions button:hover {
+            background: var(--color-secondary);
+        }
+        .review-readonly {
+            font-size: 0.9em;
+        }
+        .star-rating-display .fa-star,
+        .star-rating .fa-star {
+            color: #f5a623;
+        }
+        .star-rating {
+            font-size: 1.4em;
+            display: flex;
+            gap: 4px;
+        }
+        .star-rating .fa-star {
+            cursor: pointer;
+        }
+        .review-panel, .message-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background: var(--color-card-bg);
+            border: 1px solid var(--color-card-border);
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .review-panel textarea, .message-panel textarea {
+            width: 100%;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid var(--color-card-border);
+            background: var(--color-background);
+            color: var(--color-text);
+            font-family: inherit;
+            font-size: 0.95em;
+            resize: vertical;
+        }
+        .review-panel button, .message-panel button {
+            align-self: flex-start;
+            background: var(--color-primary);
+            color: #fff;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+        .review-panel button:hover, .message-panel button:hover {
+            background: var(--color-secondary);
+        }
+        .message-thread {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 160px;
+            overflow-y: auto;
+        }
+        .message-bubble-buyer {
+            align-self: flex-end;
+            background: var(--color-accent);
+            color: var(--color-text);
+            padding: 8px 12px;
+            border-radius: 10px 10px 0 10px;
+            max-width: 85%;
+            font-size: 0.9em;
+        }
+        .message-time {
+            display: block;
+            font-size: 0.75em;
+            opacity: 0.7;
+            margin-top: 4px;
+        }
+        .farmer-message-item {
+            background: var(--color-background);
+            border: 1px solid var(--color-card-border);
+            border-left: 4px solid var(--color-primary);
+            border-radius: 8px;
+            padding: 12px 14px;
+            margin: 10px 0;
+        }
+        .farmer-message-item p {
+            margin: 6px 0 0;
+        }
+
         html {
             scroll-behavior: smooth;
             /* Disable native overflow-x for the sliding panel effect */
