@@ -509,25 +509,55 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             // Compress an image file down to a data URL small enough to store in a
             // Firestore document (1 MB limit per doc). Raw camera photos can be
             // several MB, which would otherwise make fbAddProduct() silently fail.
+            // Firestore rejects any document over ~1 MiB total. A single compression
+            // pass isn't always enough (a busy/detailed photo can still encode large
+            // at quality 0.7), and that was silently blowing past the limit, causing
+            // fbAddProduct() to reject with "invalid-argument" — which the caller
+            // then reported as a generic "check your connection" error, hiding the
+            // real cause. This now shrinks in a loop until the result is safely
+            // under Firestore's cap, or gives up with a clear, honest error.
+            const MAX_IMAGE_DATA_URL_BYTES = 700 * 1024; // leave headroom for other fields
+
             function compressImageFile(file, maxDim = 800, quality = 0.7) {
                 return new Promise((resolve, reject) => {
                     const reader = new FileReader();
                     reader.onload = (e) => {
                         const img = new Image();
                         img.onload = () => {
-                            let { width, height } = img;
-                            if (width > height && width > maxDim) {
-                                height = Math.round(height * (maxDim / width));
-                                width = maxDim;
-                            } else if (height > maxDim) {
-                                width = Math.round(width * (maxDim / height));
-                                height = maxDim;
+                            const attempt = (dim, q) => {
+                                let { width, height } = img;
+                                if (width > height && width > dim) {
+                                    height = Math.round(height * (dim / width));
+                                    width = dim;
+                                } else if (height > dim) {
+                                    width = Math.round(width * (dim / height));
+                                    height = dim;
+                                }
+                                const canvas = document.createElement('canvas');
+                                canvas.width = width;
+                                canvas.height = height;
+                                canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                                return canvas.toDataURL('image/jpeg', q);
+                            };
+
+                            let dim = maxDim;
+                            let q = quality;
+                            let dataUrl = attempt(dim, q);
+                            let tries = 0;
+                            // Shrink dimensions and quality together until it fits,
+                            // or we've tried enough times to know it never will.
+                            while (dataUrl.length > MAX_IMAGE_DATA_URL_BYTES && tries < 6) {
+                                dim = Math.round(dim * 0.75);
+                                q = Math.max(0.4, q - 0.1);
+                                dataUrl = attempt(dim, q);
+                                tries++;
                             }
-                            const canvas = document.createElement('canvas');
-                            canvas.width = width;
-                            canvas.height = height;
-                            canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                            resolve(canvas.toDataURL('image/jpeg', quality));
+
+                            if (dataUrl.length > MAX_IMAGE_DATA_URL_BYTES) {
+                                reject(new Error('Image is too large to store even after compression. Please choose a smaller photo.'));
+                                return;
+                            }
+                            resolve(dataUrl);
                         };
                         img.onerror = reject;
                         img.src = e.target.result;
@@ -564,6 +594,10 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     showToast('Marketplace sync is unavailable right now — please try again in a moment.', false);
                     return;
                 }
+                if (!navigator.onLine) {
+                    showToast('You appear to be offline. Reconnect and try again.', false);
+                    return;
+                }
                 try {
                     await window.fbAddProduct({
                         name,
@@ -579,8 +613,22 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     // for this browser (and every other logged-in account) shortly.
                     showToast(`${name} has been listed for sale!`, true);
                 } catch (err) {
+                    // Surface *why* it failed instead of a one-size-fits-all message —
+                    // "permission-denied" (Firestore security rules blocking writes)
+                    // and "invalid-argument"/oversized payload are the two real causes
+                    // seen in practice; both were previously masked as a generic
+                    // "check your connection" toast, which sent debugging in the
+                    // wrong direction (looks like a network problem, isn't one).
                     console.error('Failed to add product listing:', err);
-                    showToast('Could not publish your listing. Please check your connection and try again.', false);
+                    let msg = 'Could not publish your listing. Please try again.';
+                    if (err && err.code === 'permission-denied') {
+                        msg = 'Could not publish: the marketplace database is not accepting writes right now (permission denied). This is a configuration issue on our end, not your connection.';
+                    } else if (err && (err.code === 'invalid-argument' || err.code === 'resource-exhausted')) {
+                        msg = 'Could not publish: the listing data (likely the photo) was too large. Try a smaller/simpler photo.';
+                    } else if (err && err.code === 'unavailable') {
+                        msg = 'Could not publish: the server is temporarily unreachable. Please check your connection and try again.';
+                    }
+                    showToast(msg, false);
                 }
             };
 
