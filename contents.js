@@ -325,6 +325,14 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             function applyRoleVisibility(role) {
                 document.body.classList.remove('role-farmer', 'role-buyer');
                 document.body.classList.add(role === 'farmer' ? 'role-farmer' : 'role-buyer');
+                // The set of visible nav pills just changed (farmer-only/buyer-only
+                // pills toggled) — re-measure the wheel so centering stays correct.
+                // Deferred: on first load this can run before setupNavWheel() has
+                // executed yet, so the existence check happens inside the timeout,
+                // not before scheduling it.
+                setTimeout(() => {
+                    if (typeof window.__resizeNavWheel === 'function') window.__resizeNavWheel();
+                }, 0);
             }
 
             function initials(name) {
@@ -599,6 +607,25 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 'Tools': '🛠️'
             };
 
+            // Shared "why did this Firestore write fail" translator. A bare
+            // "permission-denied" almost always means the security rules simply
+            // don't have an allow rule for that collection yet (very likely right
+            // now for productReviews/buyerFarmerMessages/farmerNotifications,
+            // which are newer than the rules were last written) — surfacing that
+            // distinctly saves guessing "is this a network problem?" every time.
+            function describeFirestoreWriteError(err, fallback) {
+                if (err && err.code === 'permission-denied') {
+                    return `Could not save: the database is not accepting writes for this yet (permission denied). This means Firestore's security rules need a rule added for this collection — it's a configuration issue, not your connection.`;
+                }
+                if (err && (err.code === 'invalid-argument' || err.code === 'resource-exhausted')) {
+                    return 'Could not save: the data was too large or invalid. Try shortening it.';
+                }
+                if (err && err.code === 'unavailable') {
+                    return 'Could not save: the server is temporarily unreachable. Please check your connection and try again.';
+                }
+                return fallback;
+            }
+
             async function addProductListing(name, qty, price, imageDataUrl, category) {
                 if (!currentUser || currentUser.role !== 'farmer') return;
                 if (!name || isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
@@ -643,15 +670,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     // "check your connection" toast, which sent debugging in the
                     // wrong direction (looks like a network problem, isn't one).
                     console.error('Failed to add product listing:', err);
-                    let msg = 'Could not publish your listing. Please try again.';
-                    if (err && err.code === 'permission-denied') {
-                        msg = 'Could not publish: the marketplace database is not accepting writes right now (permission denied). This is a configuration issue on our end, not your connection.';
-                    } else if (err && (err.code === 'invalid-argument' || err.code === 'resource-exhausted')) {
-                        msg = 'Could not publish: the listing data (likely the photo) was too large. Try a smaller/simpler photo.';
-                    } else if (err && err.code === 'unavailable') {
-                        msg = 'Could not publish: the server is temporarily unreachable. Please check your connection and try again.';
-                    }
-                    showToast(msg, false);
+                    showToast(describeFirestoreWriteError(err, 'Could not publish your listing. Please try again.'), false);
                 }
             };
 
@@ -1029,7 +1048,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     renderProductListings();
                 } catch (err) {
                     console.error('Failed to submit review:', err);
-                    showToast('Could not submit your review. Please try again.', false);
+                    showToast(describeFirestoreWriteError(err, 'Could not submit your review. Please try again.'), false);
                 }
             };
 
@@ -1062,7 +1081,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     renderPurchases();
                 } catch (err) {
                     console.error('Failed to send message:', err);
-                    showToast('Could not send your message. Please try again.', false);
+                    showToast(describeFirestoreWriteError(err, 'Could not send your message. Please try again.'), false);
                 }
             };
 
@@ -1249,7 +1268,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             
             const container = document.querySelector('.container');
             const sections = document.querySelectorAll('section');
-            const navLinks = document.querySelectorAll('.nav-link');
+            const navLinks = Array.from(document.querySelectorAll('.nav-link'));
             let activeSectionID = 'marketplace';
 
             // ---------------------------------------------------------------
@@ -1287,9 +1306,59 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                  }
             });
 
+            function navigateToSection(targetID, link) {
+                if (targetID === activeSectionID) {
+                    navLinks.forEach(l => l.classList.remove('active'));
+                    if (link) link.classList.add('active');
+                    return;
+                }
+
+                const current = document.getElementById(activeSectionID);
+                const next = document.getElementById(targetID);
+                if (!current || !next) return;
+
+                const currentIndex = Array.from(sections).findIndex(s => s.id === activeSectionID);
+                const nextIndex = Array.from(sections).findIndex(s => s.id === targetID);
+
+                // 1. Hide Current
+                if (nextIndex > currentIndex) {
+                    current.style.transform = 'translateX(-100%)'; // Slide left out
+                } else {
+                    current.style.transform = 'translateX(100%)'; // Slide right out
+                }
+                current.classList.remove('active-panel');
+
+
+                if (nextIndex > currentIndex) {
+                    next.style.transform = 'translateX(100%)';
+                } else {
+                    next.style.transform = 'translateX(-100%)';
+                }
+                next.style.opacity = '1';
+
+
+                setTimeout(() => {
+                    next.style.transform = 'translateX(0)';
+                    next.classList.add('active-panel');
+                }, 50);
+
+                activeSectionID = targetID;
+                // Resize .container to the incoming section right away (best guess)
+                // and again once its slide-in transition finishes (exact final height).
+                syncContainerHeight();
+                setTimeout(syncContainerHeight, 650);
+
+                // Updateting Navbar
+                navLinks.forEach(l => l.classList.remove('active'));
+                if (link) link.classList.add('active');
+            }
+
             navLinks.forEach((link) => {
                 link.addEventListener('click', (e) => {
                     e.preventDefault();
+                    // A drag that ended on top of a pill shouldn't also count as a tap
+                    // on it — the wheel's own click-suppression (see setupNavWheel)
+                    // stops those before they get here.
                     if (window.audioPlayer && !window.audioPlayer.paused) {
                         window.audioPlayer.pause();
                         window.audioPlayer.currentTime = 0;
@@ -1298,49 +1367,131 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                             btn.style.boxShadow = 'none';
                         });
                     }
-                    
+
                     const targetID = link.getAttribute('data-target');
-                    if (targetID === activeSectionID) return;
-
-                    const current = document.getElementById(activeSectionID);
-                    const next = document.getElementById(targetID);
-                    
-                    const currentIndex = Array.from(sections).findIndex(s => s.id === activeSectionID);
-                    const nextIndex = Array.from(sections).findIndex(s => s.id === targetID);
-
-                    // 1. Hide Current
-                    if (nextIndex > currentIndex) {
-                        current.style.transform = 'translateX(-100%)'; // Slide left out
-                    } else {
-                        current.style.transform = 'translateX(100%)'; // Slide right out
-                    }
-                    current.classList.remove('active-panel');
-
-                
-                    if (nextIndex > currentIndex) {
-                        next.style.transform = 'translateX(100%)';
-                    } else {
-                        next.style.transform = 'translateX(-100%)';
-                    }
-                    next.style.opacity = '1';
-                    
-                    
-                    setTimeout(() => {
-                        next.style.transform = 'translateX(0)';
-                        next.classList.add('active-panel');
-                    }, 50); 
-                    
-                    activeSectionID = targetID;
-                    // Resize .container to the incoming section right away (best guess)
-                    // and again once its slide-in transition finishes (exact final height).
-                    syncContainerHeight();
-                    setTimeout(syncContainerHeight, 650);
-
-                    // Updateting Navbar 
-                    navLinks.forEach(l => l.classList.remove('active'));
-                    link.classList.add('active');
+                    // Center the tapped pill in the wheel, then switch pages.
+                    link.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                    navigateToSection(targetID, link);
                 });
             });
+
+            /* ===================================================== */
+            /* NAVBAR "SCROLL WHEEL" — draggable, snap-to-center pages */
+            /* ===================================================== */
+            // Turns the navbar into a horizontally scrollable wheel: drag/swipe it
+            // and whichever page pill lands in the center becomes the active page
+            // (like a picker wheel), with nearby pills shrinking/fading based on
+            // distance from center. Works via native touch-scrolling on mobile;
+            // mouse-drag is added below for desktop/trackpad users.
+            function setupNavWheel() {
+                const navbar = document.querySelector('.navbar');
+                if (!navbar) return;
+
+                function visibleItems() {
+                    return navLinks.filter(item => getComputedStyle(item).display !== 'none');
+                }
+
+                // Pad both ends so the first/last visible pill can still reach the
+                // horizontal center of the wheel, same trick used by native carousels.
+                function sizeSpacers() {
+                    const visible = visibleItems();
+                    if (visible.length === 0) return;
+                    const containerWidth = navbar.clientWidth;
+                    const firstW = visible[0].offsetWidth;
+                    const lastW = visible[visible.length - 1].offsetWidth;
+                    navbar.style.paddingLeft = Math.max(containerWidth / 2 - firstW / 2, 0) + 'px';
+                    navbar.style.paddingRight = Math.max(containerWidth / 2 - lastW / 2, 0) + 'px';
+                }
+
+                // Scale/fade each pill by how far it sits from the wheel's center —
+                // gives the continuous "picker wheel" feel while dragging/scrolling.
+                function updateWheelVisuals() {
+                    const rect = navbar.getBoundingClientRect();
+                    const center = rect.left + rect.width / 2;
+                    let closest = null;
+                    let closestDist = Infinity;
+                    visibleItems().forEach(item => {
+                        const r = item.getBoundingClientRect();
+                        const itemCenter = r.left + r.width / 2;
+                        const dist = Math.abs(itemCenter - center);
+                        const t = Math.min(dist / (rect.width / 2), 1);
+                        item.style.transform = `scale(${(1 - t * 0.22).toFixed(3)})`;
+                        item.style.opacity = (1 - t * 0.5).toFixed(2);
+                        if (dist < closestDist) {
+                            closestDist = dist;
+                            closest = item;
+                        }
+                    });
+                    return closest;
+                }
+
+                let settleTimer = null;
+                function onScrollSettled() {
+                    const centered = updateWheelVisuals();
+                    if (!centered) return;
+                    const targetID = centered.getAttribute('data-target');
+                    if (targetID) navigateToSection(targetID, centered);
+                }
+
+                navbar.addEventListener('scroll', () => {
+                    updateWheelVisuals();
+                    clearTimeout(settleTimer);
+                    settleTimer = setTimeout(onScrollSettled, 130);
+                }, { passive: true });
+
+                // Mouse-drag support (touch devices already get free horizontal
+                // scrolling from overflow-x: auto on the navbar).
+                let isDown = false;
+                let dragged = false;
+                let startX = 0;
+                let startScroll = 0;
+
+                navbar.addEventListener('mousedown', (e) => {
+                    isDown = true;
+                    dragged = false;
+                    navbar.classList.add('wheel-dragging');
+                    startX = e.pageX;
+                    startScroll = navbar.scrollLeft;
+                });
+                window.addEventListener('mousemove', (e) => {
+                    if (!isDown) return;
+                    const dx = e.pageX - startX;
+                    if (Math.abs(dx) > 4) dragged = true;
+                    navbar.scrollLeft = startScroll - dx;
+                });
+                window.addEventListener('mouseup', () => {
+                    if (!isDown) return;
+                    isDown = false;
+                    navbar.classList.remove('wheel-dragging');
+                });
+                // Swallow the click a drag ends on, so it doesn't also jump-navigate
+                // to whichever pill the cursor happened to release over.
+                navbar.addEventListener('click', (e) => {
+                    if (dragged) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        dragged = false;
+                    }
+                }, true);
+
+                window.addEventListener('resize', debounce(() => {
+                    sizeSpacers();
+                    updateWheelVisuals();
+                }, 150));
+
+                sizeSpacers();
+                updateWheelVisuals();
+
+                // Exposed so login/logout (which changes which pills are visible via
+                // farmer-only/buyer-only) can re-center the wheel around the new set.
+                window.__resizeNavWheel = () => {
+                    sizeSpacers();
+                    updateWheelVisuals();
+                };
+            }
+            setupNavWheel();
+            /* ================= END NAVBAR SCROLL WHEEL ================= */
+
 
             // Recompute on window resize (orientation change, keyboard open/close, etc.)
             window.addEventListener('resize', debouncedSyncHeight);
