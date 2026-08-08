@@ -7,10 +7,16 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
 
         // Cloud Functions occasionally 429 under load; retry with jittered exponential
         // backoff instead of failing the chat/TTS request outright.
-        async function fetchWithBackoff(url, options, maxRetries = 3) {
+        // Also guards against a hung request: plain fetch() has no timeout of its own,
+        // so a stalled/cold-starting Cloud Function would otherwise leave callers
+        // (e.g. the TTS "speaking" spinner) waiting forever with no error and no retry.
+        async function fetchWithBackoff(url, options, maxRetries = 3, timeoutMs = 20000) {
             for (let i = 0; i < maxRetries; i++) {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
                 try {
-                    const response = await fetch(url, options);
+                    const response = await fetch(url, { ...options, signal: controller.signal });
+                    clearTimeout(timeoutId);
                     if (response.ok) {
                         return response;
                     }
@@ -20,7 +26,11 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
                     await new Promise(resolve => setTimeout(resolve, delay));
                 } catch (error) {
-                    if (i === maxRetries - 1) throw error;
+                    clearTimeout(timeoutId);
+                    const timedOut = error.name === 'AbortError';
+                    if (i === maxRetries - 1) {
+                        throw timedOut ? new Error('Request timed out') : error;
+                    }
                     const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
                     await new Promise(resolve => setTimeout(resolve, delay));
                 }
@@ -864,6 +874,10 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 return html;
             }
 
+            function t(key) {
+                return (translations[currentLang] && translations[currentLang][key]) || translations.en[key];
+            }
+
             function renderPurchases() {
                 const container = document.getElementById('myPurchasesItems');
                 if (!container || !currentUser || currentUser.role !== 'buyer') return;
@@ -872,7 +886,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 const mine = all[currentUser.name] || [];
 
                 if (mine.length === 0) {
-                    container.innerHTML = `<p>You haven't bought anything yet.</p>`;
+                    container.innerHTML = `<p>${t('purchases-empty')}</p>`;
                     return;
                 }
 
@@ -895,13 +909,13 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                             <div class="listing-item-content">
                                 <span>
                                     <strong>${productName}</strong> — ${p.qty} units × ₹${p.price.toFixed(2)}<br>
-                                    <small>Bought from ${farmerName} · ${timeAgo(p.time)}</small>
+                                    <small>${t('purchase-bought-from')} ${farmerName} · ${timeAgo(p.time)}</small>
                                 </span>
                             </div>
 
                             <div class="purchase-actions">
-                                <button onclick="toggleReviewForm('${p.id}')"><i class="fas fa-star"></i> ${existingReview ? 'Update Review' : 'Leave a Review'}</button>
-                                <button onclick="toggleMessageForm('${p.id}')"><i class="fas fa-envelope"></i> Message Farmer</button>
+                                <button onclick="toggleReviewForm('${p.id}')"><i class="fas fa-star"></i> ${existingReview ? t('btn-update-review') : t('btn-leave-review')}</button>
+                                <button onclick="toggleMessageForm('${p.id}')"><i class="fas fa-envelope"></i> ${t('btn-message-farmer')}</button>
                             </div>
 
                             ${existingReview && !reviewOpen ? `
@@ -915,8 +929,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                                 <div class="star-rating" id="starRating-${p.id}" data-value="${existingReview ? existingReview.rating : 0}">
                                     ${[1,2,3,4,5].map(n => `<i class="${existingReview && n <= existingReview.rating ? 'fas' : 'far'} fa-star" onclick="setReviewRating('${p.id}', ${n})"></i>`).join('')}
                                 </div>
-                                <textarea id="reviewComment-${p.id}" rows="2" placeholder="What did you think of this product? (optional)">${existingReview ? escapeHtml(existingReview.comment || '') : ''}</textarea>
-                                <button onclick="submitReview('${p.id}')">Submit Review</button>
+                                <textarea id="reviewComment-${p.id}" rows="2" placeholder="${t('review-comment-placeholder')}">${existingReview ? escapeHtml(existingReview.comment || '') : ''}</textarea>
+                                <button onclick="submitReview('${p.id}')">${t('btn-submit-review')}</button>
                             </div>
 
                             <div class="message-panel" style="display:${msgOpen ? 'block' : 'none'};">
@@ -925,8 +939,8 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                                         ${threadMessages.map(m => `<div class="message-bubble-buyer">${escapeHtml(m.text)}<span class="message-time">${timeAgo(m.createdAt)}</span></div>`).join('')}
                                     </div>
                                 ` : ''}
-                                <textarea id="messageText-${p.id}" rows="2" placeholder="Ask ${farmerName} a question about your order..."></textarea>
-                                <button onclick="submitMessage('${p.id}')">Send Message</button>
+                                <textarea id="messageText-${p.id}" rows="2" placeholder="${t('message-ask-placeholder')(farmerName)}"></textarea>
+                                <button onclick="submitMessage('${p.id}')">${t('btn-send-message')}</button>
                             </div>
                         </div>
                     `;
@@ -964,14 +978,14 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 const ratingEl = document.getElementById(`starRating-${purchaseId}`);
                 const rating = ratingEl ? parseInt(ratingEl.getAttribute('data-value')) : 0;
                 if (!rating || rating < 1 || rating > 5) {
-                    showToast('Please select a star rating first.', false);
+                    showToast(t('toast-select-rating'), false);
                     return;
                 }
                 const commentEl = document.getElementById(`reviewComment-${purchaseId}`);
                 const comment = commentEl ? commentEl.value.trim() : '';
 
                 if (typeof window.fbAddReview !== 'function') {
-                    showToast('Reviews are unavailable right now — please try again in a moment.', false);
+                    showToast(t('toast-reviews-unavailable'), false);
                     return;
                 }
                 try {
@@ -983,13 +997,13 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                         rating,
                         comment
                     });
-                    showToast('Thanks for your review!', true);
+                    showToast(t('toast-review-thanks'), true);
                     openPurchaseForm = null;
                     renderPurchases();
                     renderProductListings();
                 } catch (err) {
                     console.error('Failed to submit review:', err);
-                    showToast(describeFirestoreWriteError(err, 'Could not submit your review. Please try again.'), false);
+                    showToast(describeFirestoreWriteError(err, t('toast-review-error')), false);
                 }
             };
 
@@ -1003,12 +1017,12 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 const textEl = document.getElementById(`messageText-${purchaseId}`);
                 const text = textEl ? textEl.value.trim() : '';
                 if (!text) {
-                    showToast('Please write a message first.', false);
+                    showToast(t('toast-write-message-first'), false);
                     return;
                 }
 
                 if (typeof window.fbAddMessage !== 'function') {
-                    showToast('Messaging is unavailable right now — please try again in a moment.', false);
+                    showToast(t('toast-messaging-unavailable'), false);
                     return;
                 }
                 try {
@@ -1018,11 +1032,11 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                         productName: purchase.name,
                         text
                     });
-                    showToast(`Message sent to ${purchase.farmerName}.`, true);
+                    showToast(t('toast-message-sent')(purchase.farmerName), true);
                     renderPurchases();
                 } catch (err) {
                     console.error('Failed to send message:', err);
-                    showToast(describeFirestoreWriteError(err, 'Could not send your message. Please try again.'), false);
+                    showToast(describeFirestoreWriteError(err, t('toast-message-error')), false);
                 }
             };
 
@@ -1035,14 +1049,14 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     .sort((a, b) => b.createdAt - a.createdAt);
 
                 if (mine.length === 0) {
-                    container.innerHTML = `<p>No messages yet.</p>`;
+                    container.innerHTML = `<p>${t('messages-empty')}</p>`;
                     return;
                 }
 
                 container.innerHTML = mine.map(m => `
                     <div class="farmer-message-item">
                         <div>
-                            <strong>${escapeHtml(m.buyerName)}</strong> ${m.productName ? `<span class="category-badge">about ${escapeHtml(m.productName)}</span>` : ''}
+                            <strong>${escapeHtml(m.buyerName)}</strong> ${m.productName ? `<span class="category-badge">${t('msg-about-prefix')} ${escapeHtml(m.productName)}</span>` : ''}
                             <span class="message-time">${timeAgo(m.createdAt)}</span>
                         </div>
                         <p>${escapeHtml(m.text)}</p>
@@ -1552,6 +1566,31 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     'form-button-send': 'Send Message',
                     'footer-copyright': '© 2025 Digital Marketplace & Learning Platform for Farmers | All Rights Reserved',
                     'footer-visits': 'Total Visits: ',
+                    'nav-messages': 'Messages',
+                    'nav-mypurchases': 'My Purchases',
+                    'sec-messages-title': 'Messages from Buyers',
+                    'sec-messages-p': 'Notes buyers have sent you about your products.',
+                    'messages-empty': 'No messages yet.',
+                    'msg-about-prefix': 'about',
+                    'sec-mypurchases-title': 'My Purchases',
+                    'sec-mypurchases-p': "Products you've bought. Leave a review or send the farmer a message about your order.",
+                    'purchases-empty': "You haven't bought anything yet.",
+                    'purchase-bought-from': 'Bought from',
+                    'btn-leave-review': 'Leave a Review',
+                    'btn-update-review': 'Update Review',
+                    'btn-message-farmer': 'Message Farmer',
+                    'review-comment-placeholder': 'What did you think of this product? (optional)',
+                    'btn-submit-review': 'Submit Review',
+                    'message-ask-placeholder': (name) => `Ask ${name} a question about your order...`,
+                    'btn-send-message': 'Send Message',
+                    'toast-select-rating': 'Please select a star rating first.',
+                    'toast-reviews-unavailable': 'Reviews are unavailable right now — please try again in a moment.',
+                    'toast-review-thanks': 'Thanks for your review!',
+                    'toast-review-error': 'Could not submit your review. Please try again.',
+                    'toast-write-message-first': 'Please write a message first.',
+                    'toast-messaging-unavailable': 'Messaging is unavailable right now — please try again in a moment.',
+                    'toast-message-sent': (name) => `Message sent to ${name}.`,
+                    'toast-message-error': 'Could not send your message. Please try again.',
                     'toast-success': 'Message sent successfully! We will contact you soon.',
                     'toast-error-fields': 'Please fill all marketplace fields correctly.',
                     'toast-error-image': 'Please add a photo of the product (from storage or camera) before selling.',
@@ -1658,6 +1697,31 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     'form-button-send': 'संदेश भेजें',
                     'footer-copyright': '© 2025 डिजिटल बाज़ार और सीखने का मंच | सर्वाधिकार सुरक्षित',
                     'footer-visits': 'कुल विज़िट: ',
+                    'nav-messages': 'संदेश',
+                    'nav-mypurchases': 'मेरी खरीदारी',
+                    'sec-messages-title': 'खरीदारों के संदेश',
+                    'sec-messages-p': 'खरीदारों ने आपके उत्पादों के बारे में जो नोट्स भेजे हैं।',
+                    'messages-empty': 'अभी तक कोई संदेश नहीं है।',
+                    'msg-about-prefix': 'विषय:',
+                    'sec-mypurchases-title': 'मेरी खरीदारी',
+                    'sec-mypurchases-p': 'आपके द्वारा खरीदे गए उत्पाद। समीक्षा दें या किसान को अपने ऑर्डर के बारे में संदेश भेजें।',
+                    'purchases-empty': 'आपने अभी तक कुछ नहीं खरीदा है।',
+                    'purchase-bought-from': 'खरीदा गया:',
+                    'btn-leave-review': 'समीक्षा लिखें',
+                    'btn-update-review': 'समीक्षा अपडेट करें',
+                    'btn-message-farmer': 'किसान को संदेश भेजें',
+                    'review-comment-placeholder': 'आपको यह उत्पाद कैसा लगा? (वैकल्पिक)',
+                    'btn-submit-review': 'समीक्षा सबमिट करें',
+                    'message-ask-placeholder': (name) => `${name} से अपने ऑर्डर के बारे में पूछें...`,
+                    'btn-send-message': 'संदेश भेजें',
+                    'toast-select-rating': 'कृपया पहले स्टार रेटिंग चुनें।',
+                    'toast-reviews-unavailable': 'समीक्षाएँ अभी उपलब्ध नहीं हैं — कृपया थोड़ी देर में पुनः प्रयास करें।',
+                    'toast-review-thanks': 'आपकी समीक्षा के लिए धन्यवाद!',
+                    'toast-review-error': 'आपकी समीक्षा सबमिट नहीं हो सकी। कृपया पुनः प्रयास करें।',
+                    'toast-write-message-first': 'कृपया पहले एक संदेश लिखें।',
+                    'toast-messaging-unavailable': 'संदेश सेवा अभी उपलब्ध नहीं है — कृपया थोड़ी देर में पुनः प्रयास करें।',
+                    'toast-message-sent': (name) => `${name} को संदेश भेज दिया गया।`,
+                    'toast-message-error': 'आपका संदेश भेजा नहीं जा सका। कृपया पुनः प्रयास करें।',
                     'toast-success': 'संदेश सफलतापूर्वक भेज दिया गया! हम जल्द ही आपसे संपर्क करेंगे।',
                     'toast-error-fields': 'कृपया बाज़ार के सभी फ़ील्ड सही ढंग से भरें।',
                     'toast-error-image': 'बिक्री से पहले कृपया उत्पाद की फोटो जोड़ें (स्टोरेज या कैमरे से)।',
@@ -1724,701 +1788,4 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     'sec-myproducts-title': 'எனது பொருட்கள்',
                     'sec-myproducts-p': 'நீங்கள் விற்பனைக்கு பட்டியலிட்ட பொருட்களை நிர்வகிக்கவும் — வாங்குபவர்கள் இவற்றை சந்தையில் நேரடியாகக் காணலாம் மற்றும் வாங்கலாம்.',
                     'sell-title': 'உங்கள் பொருட்களை விற்கவும்',
-                    'sell-button': 'விற்பனைக்கு இடுங்கள்',
-                    'sell-category-label': 'பொருள் வகை (அவசியம்)',
-                    'category-option-default': '-- வகையை தேர்ந்தெடுக்கவும் --',
-                    'category-option-vegetables': '🥦 காய்கறிகள்',
-                    'category-option-fruits': '🍎 பழங்கள்',
-                    'category-option-seeds': '🌱 விதைகள்',
-                    'category-option-tools': '🛠️ கருவிகள்',
-                    'sell-image-label': 'பொருளின் புகைப்படத்தை சேர்க்கவும் (அவசியம்) 📷',
-                    'cart-title': 'உங்கள் கார்ட்',
-                    'cart-empty': 'உங்கள் கார்ட் காலியாக உள்ளது.',
-                    'sec-learning-title': 'கற்றல் மையம்',
-                    'sec-learning-p': 'எங்கள் தளத்தின் மூலம் நவீன விவசாய நுட்பங்கள், உற்பத்தி மேம்பாடு மற்றும் பயிர் மேலாண்மையை கற்றுக்கொள்ளுங்கள்.',
-                    'course-1-title': 'நவீன நீர்ப்பாசன நுட்பங்கள்',
-                    'course-1-desc': 'சொட்டு மற்றும் தெளிப்பு முறைகள் மூலம் நீர் பயன்பாட்டை மேம்படுத்துங்கள். சிறந்த நீர் மேலாண்மையை கற்றுக்கொள்ளுங்கள்.',
-                    'course-2-title': 'இயற்கை வேளாண்மை',
-                    'course-2-desc': 'இயற்கை, ரசாயனமற்ற சாகுபடி மற்றும் மண் வளப்படுத்தும் நுட்பங்களில் தேர்ச்சி பெறுங்கள்.',
-                    'course-3-title': 'பயிர் காப்பீடு விழிப்புணர்வு',
-                    'course-3-desc': 'உங்கள் அறுவடையை ஆபத்துகளிலிருந்து பாதுகாக்க கொள்கை விவரங்கள் மற்றும் உரிமைகோரல் செயல்முறையை புரிந்துகொள்ளுங்கள்.',
-                    'course-4-title': 'கிளவுட் ஒருங்கிணைப்பு மற்றும் இ-கற்றல்',
-                    'course-4-desc': 'தரவு மேலாண்மை மற்றும் டிஜிட்டல் வேளாண் வளங்களை அணுக கிளவுட் கருவிகளைப் பயன்படுத்துங்கள்.',
-                    'ai-chat-title': '✨ அக்ரி-ஜெமினி: உடனடி பயிர் ஆலோசகர்',
-                    'ai-desc': 'விவசாய நுட்பங்கள், சந்தை போக்குகள் அல்லது பூச்சி மேலாண்மை பற்றி என்னிடம் எதுவும் கேளுங்கள்!',
-                    'sec-video-title': 'விவசாயிகளுக்கான வீடியோக்கள்',
-                    'sec-video-p': 'பயிர் சாகுபடி, மண் ஆரோக்கியம் மற்றும் நவீன விவசாய நடைமுறைகள் குறித்த இந்த பயனுள்ள வீடியோக்களைப் பாருங்கள்.',
-                    'sec-scheme-title': 'விவசாயிகளுக்கான அரசு திட்டங்கள்',
-                    'sec-scheme-p': 'விவசாயிகளுக்கு உதவும் வகையில் வடிவமைக்கப்பட்ட சில முக்கிய அரசு திட்டங்கள் இங்கே உள்ளன. மேலும் அறியவும் விண்ணப்பிக்கவும் இணைப்புகளை கிளிக் செய்யவும்:',
-                    'scheme-1-desc': 'பிரதான் மந்திரி கிசான் சம்மான் நிதி (PM-KISAN) – விவசாயிகளுக்கு ஆண்டுதோறும் ₹6,000 நேரடி வருமான உதவி.',
-                    'scheme-2-desc': 'பிரதான் மந்திரி பசல் பீமா யோஜனா (PMFBY) – இயற்கை பேரிடர்களுக்கு எதிராக விவசாயிகளுக்கான பயிர் காப்பீடு.',
-                    'scheme-3-desc': 'மண் ஆரோக்கிய அட்டை திட்டம் – விவசாயிகளுக்கு மண் ஆரோக்கிய அறிக்கைகள் மற்றும் பரிந்துரைகளை வழங்குகிறது.',
-                    'scheme-4-desc': 'வேளாண் உள்கட்டமைப்பு நிதி (AIF) – வேளாண் உள்கட்டமைப்பை மேம்படுத்த நிதி உதவி.',
-                    'scheme-5-desc': 'தேசிய வேளாண் சந்தை (eNAM) – விவசாயிகள் தங்கள் விளைபொருட்களை விற்க ஆன்லைன் வர்த்தக தளம்.',
-                    'sec-contact-title': 'எங்களை தொடர்பு கொள்ளுங்கள்',
-                    'contact-info-1': 'மின்னஞ்சல்: support@farmerplatform.in',
-                    'contact-info-2': 'உதவி எண்: +91 7393953233',
-                    'form-label-name': 'பெயர்',
-                    'form-label-email': 'மின்னஞ்சல்',
-                    'form-label-message': 'செய்தி',
-                    'form-button-send': 'செய்தி அனுப்பவும்',
-                    'footer-copyright': '© 2025 டிஜிட்டல் சந்தை & விவசாயிகளுக்கான கற்றல் தளம் | அனைத்து உரிமைகளும் பாதுகாக்கப்பட்டவை',
-                    'footer-visits': 'மொத்த வருகைகள்: ',
-                    'toast-success': 'செய்தி வெற்றிகரமாக அனுப்பப்பட்டது! நாங்கள் விரைவில் உங்களை தொடர்பு கொள்வோம்.',
-                    'toast-error-fields': 'சந்தை புலங்கள் அனைத்தையும் சரியாக நிரப்பவும்.',
-                    'toast-error-image': 'விற்பனைக்கு முன் பொருளின் புகைப்படத்தை (சேமிப்பு அல்லது கேமராவிலிருந்து) சேர்க்கவும்.',
-                    'toast-error-category': 'ஒரு வகையை தேர்ந்தெடுக்கவும்: காய்கறிகள், பழங்கள், விதைகள் அல்லது கருவிகள்.',
-                    'toast-error-search': 'தேட பொருளின் பெயரை உள்ளிடவும்.',
-                    'alert-cart-add': (name) => `${name} கார்ட்டில் சேர்க்கப்பட்டது!`,
-                    'alert-pay-success': (amount) => `₹${amount} கட்டணம் வெற்றிகரமாக செலுத்தப்பட்டது! உங்கள் வாங்குதலுக்கு நன்றி.`,
-                    'alert-pay-processing': (amount) => `₹${amount} கட்டணம் செயலாக்கப்படுகிறது...`,
-                    'alert-search': (name) => `"${name}" சந்தையில் தேடப்படுகிறது...`,
-                    'alert-empty-cart': 'உங்கள் கார்ட் காலியாக உள்ளது. செலுத்த எதுவும் இல்லை.',
-                    'listen-label': 'கேளுங்கள்',
-                    'steps-label': '✍️ பின்பற்ற வேண்டிய படிகள்:',
-                    'toast-sold-out': (qty, name) => `${name} இன் ${qty} அலகுகள் மட்டுமே கிடைக்கின்றன.`,
-                    'nav-about': 'எங்களைப் பற்றி',
-                    'sec-about-title': 'AGRI दुनिया பற்றி',
-                    'about-eyebrow': 'எங்கள் கதை',
-                    'about-headline': 'விவசாயிகளால் விளைவிக்கப்பட்டது. கவனத்துடன் வழங்கப்படுகிறது.',
-                    'about-intro': 'விவசாயிகள் நல்ல உணவை விளைவிக்க கடுமையாக உழைக்கிறார்கள், ஆனால் அது தட்டை அடையும் நேரத்தில், அதன் மதிப்பில் பெரும் பங்கு மண்ணைத் தொடாத நபர்களுக்குச் சென்றுவிடுகிறது. இதை மாற்றவே AGRI दुनिया உருவாக்கப்பட்டது — விவசாயிகள் தாங்கள் விளைவிப்பதை உண்ணும் மக்களுக்கு நேரடியாக விற்கும் ஒரு தளம், விவசாயம் தனி போராட்டமாக இல்லாமல் ஒரு பகிரப்பட்ட முயற்சியாக உணரப்படும் இடம்.',
-                    'about-what-title': 'நாங்கள் என்ன செய்கிறோம்',
-                    'about-what-1-title': 'நேரடி விற்பனை',
-                    'about-what-1-desc': 'விவசாயிகள் தங்கள் விளைபொருட்களை பட்டியலிட்டு நுகர்வோருக்கு நேரடியாக விற்கிறார்கள் — இடையில் எந்த தரகரும் இல்லை.',
-                    'about-what-2-title': 'முன்கூட்டியே ஆர்டர் செய்யுங்கள்',
-                    'about-what-2-desc': 'தூரத்தைப் பொறுத்து, டெலிவரிக்கு சுமார் 11–12 மணி நேரம் முன்பே நுகர்வோர் ஆர்டர் செய்கிறார்கள், இதனால் விவசாயிக்கு என்ன அறுவடை செய்ய வேண்டும் என்பது துல்லியமாகத் தெரியும்.',
-                    'about-what-3-title': 'ஒழுங்கமைக்கப்பட்ட சேகரிப்பு',
-                    'about-what-3-desc': 'எங்கள் நியமிக்கப்பட்ட டெம்போ மற்றும் போக்குவரத்து குழு விவசாயிகளிடமிருந்து நேரடியாக மொத்தமாக விளைபொருட்களை சேகரிக்கிறது.',
-                    'about-what-4-title': 'இரு தரப்பினருக்கும் நியாயமான மதிப்பு',
-                    'about-what-4-desc': 'தேவையற்ற தரகர்களை நீக்குவதால் விவசாயிகளுக்கு சிறந்த வருமானமும், நுகர்வோருக்கு சிறந்த விலையும் கிடைக்கிறது.',
-                    'about-how-title': 'நாங்கள் எப்படி செயல்படுகிறோம்',
-                    'about-how-1-title': 'விவசாயி அறுவடை செய்கிறார்',
-                    'about-how-1-desc': 'உண்மையான ஆர்டர்களுக்கு ஏற்ப அறுவடை செய்யப்படும் புதிய விளைபொருள் — யூகத்தின் அடிப்படையில் அல்ல.',
-                    'about-how-2-title': 'AGRI दुनिया சேகரிக்கிறது',
-                    'about-how-2-desc': 'எங்கள் டெம்போ மற்றும் போக்குவரத்து குழு விவசாயிகளிடமிருந்து மொத்தமாக விளைபொருட்களை எடுத்துச் செல்கிறது.',
-                    'about-how-3-title': 'வரிசைப்படுத்துதல் & விநியோகம்',
-                    'about-how-3-desc': 'எங்கள் குழு விளைபொருட்களை வரிசைப்படுத்தி டெலிவரிக்கு தயார் செய்கிறது.',
-                    'about-how-4-title': 'நுகர்வோரை சென்றடைகிறது',
-                    'about-how-4-desc': 'புதிய விளைபொருள் நியாயமான விலையில் வாங்குபவரிடம் டெலிவரி செய்யப்படுகிறது.',
-                    'about-beyond-title': 'சந்தையை தாண்டி',
-                    'about-beyond-intro': 'AGRI दुनिया வெறும் வாங்கவும் விற்கவும் ஒரு இடம் மட்டுமல்ல. ஒழுங்கற்ற சந்தையில் தனித்தனியாகப் போட்டியிடுவதற்குப் பதிலாக, விவசாயிகள் ஒருவருக்கொருவர் ஆதரவளிக்கும் ஒரு கூட்டுறவு பாணி விவசாயி சமூகத்தை உருவாக்க நாங்கள் பணியாற்றி வருகிறோம்.',
-                    'about-beyond-item-1': 'விவசாய கருவிகளை வாங்கவும் விற்கவும்',
-                    'about-beyond-item-2': 'விதைகள் மற்றும் பிற வேளாண் வளங்களை வாங்கவும்',
-                    'about-beyond-item-3': 'நவீன விவசாய நுட்பங்களை கற்றுக்கொள்ளவும்',
-                    'about-beyond-item-4': 'புதிதாக அறிமுகப்படுத்தப்பட்ட அரசு திட்டங்கள் குறித்து அறிந்திருக்கவும்',
-                    'about-beyond-item-5': 'மேலும் பொறுப்பான, நிலையான விவசாய முறைகளை பின்பற்றவும்',
-                    'about-beyond-item-6': 'தனித்தனியாக அல்லாமல் ஒரு சமூகமாக இணைந்து செயல்படவும்',
-                    'about-beyond-note': 'வேளாண் ரசாயனங்களை பொறுப்புடன் பயன்படுத்துவதையும், சிறந்த விவசாய முறைகளையும் ஊக்குவிக்கும் ஒப்பந்தங்களில் விவசாயிகளுடன் நாங்கள் இணைந்து பணியாற்றி வருகிறோம் — ஆரோக்கியமான மண்ணுக்கும், ஆரோக்கியமான உணவுக்கும்.',
-                    'about-vision-title': 'எங்கள் நோக்கம்',
-                    'about-vision-desc': 'AGRI दुनिया வெறும் ஆப் ஆக இல்லாமல் — விளைபொருள் நேரடியாக வயலிலிருந்து வீட்டிற்கு செல்லும், விவசாயிகள் நம்பிக்கையுடன் முன்னேற தேவையான கருவிகள், அறிவு மற்றும் ஆதரவைப் பெறும் ஒரு விவசாய சமூகமாக இருக்க வேண்டும் என்று நாங்கள் விரும்புகிறோம்.',
-                    'about-cta-title': 'நீங்கள் விளைவிப்பவராக இருந்தாலும், வாங்குபவராக இருந்தாலும், இங்கே உங்களுக்கு ஒரு இடம் உண்டு.',
-                    'about-cta-btn': 'சந்தையை பார்வையிடுங்கள்',
-                    'about-social-title': 'இன்ஸ்டாகிராமில் எங்களை பின்தொடருங்கள்',
-                    'about-social-desc': 'புதிய அறுவடைகள், விவசாயிகளின் கதைகள், மற்றும் AGRI दुनिया-வின் புதிய செய்திகள்.'
-                },
-                'te': {
-                    'header-title': 'అగ్రి దునియా',
-                    'header-tagline': 'మార్కెట్లు, జ్ఞానం మరియు ప్రభుత్వ పథకాలకు డిజిటల్ యాక్సెస్‌తో రైతులను శక్తివంతం చేయడం',
-                    'nav-market': 'మార్కెట్‌ప్లేస్',
-                    'nav-myproducts': 'నా ఉత్పత్తులు',
-                    'nav-learning': 'లెర్నింగ్ హబ్',
-                    'nav-videos': 'వీడియోలు',
-                    'nav-schemes': 'పథకాలు',
-                    'nav-contact': 'సంప్రదించండి',
-                    'sec-market-title': 'డిజిటల్ మార్కెట్‌ప్లేస్',
-                    'sec-market-p': 'వ్యవసాయ ఉత్పత్తులను నేరుగా కొనండి మరియు అమ్మండి. రైతులు తమ పంటలను జాబితా చేయవచ్చు, కొనుగోలుదారులు నేరుగా కొనుగోలు చేయవచ్చు, ఇది న్యాయమైన వాణిజ్యాన్ని నిర్ధారిస్తుంది.',
-                    'sec-myproducts-title': 'నా ఉత్పత్తులు',
-                    'sec-myproducts-p': 'మీరు అమ్మకానికి జాబితా చేసిన ఉత్పత్తులను నిర్వహించండి — కొనుగోలుదారులు వీటిని మార్కెట్‌ప్లేస్ నుండి నేరుగా చూసి కొనుగోలు చేయవచ్చు.',
-                    'sell-title': 'మీ ఉత్పత్తులను అమ్మండి',
-                    'sell-button': 'అమ్మకానికి పోస్ట్ చేయండి',
-                    'sell-category-label': 'ఉత్పత్తి వర్గం (అవసరం)',
-                    'category-option-default': '-- వర్గాన్ని ఎంచుకోండి --',
-                    'category-option-vegetables': '🥦 కూరగాయలు',
-                    'category-option-fruits': '🍎 పండ్లు',
-                    'category-option-seeds': '🌱 విత్తనాలు',
-                    'category-option-tools': '🛠️ పనిముట్లు',
-                    'sell-image-label': 'ఉత్పత్తి ఫోటోను జోడించండి (అవసరం) 📷',
-                    'cart-title': 'మీ కార్ట్',
-                    'cart-empty': 'మీ కార్ట్ ఖాళీగా ఉంది.',
-                    'sec-learning-title': 'లెర్నింగ్ హబ్',
-                    'sec-learning-p': 'మా వేదిక ద్వారా ఆధునిక వ్యవసాయ పద్ధతులు, ఉత్పాదకత మెరుగుదల మరియు పంట నిర్వహణను నేర్చుకోండి.',
-                    'course-1-title': 'ఆధునిక నీటిపారుదల పద్ధతులు',
-                    'course-1-desc': 'డ్రిప్ మరియు స్ప్రింక్లర్ వ్యవస్థలతో నీటి వినియోగాన్ని ఆప్టిమైజ్ చేయండి. స్మార్ట్ నీటి నిర్వహణను నేర్చుకోండి.',
-                    'course-2-title': 'సేంద్రీయ వ్యవసాయం',
-                    'course-2-desc': 'సహజ, రసాయన రహిత సాగు మరియు నేల సుసంపన్నత పద్ధతులను నేర్చుకోండి.',
-                    'course-3-title': 'పంట బీమా అవగాహన',
-                    'course-3-desc': 'మీ పంటను ప్రమాదాల నుండి రక్షించడానికి పాలసీ వివరాలు మరియు క్లెయిమ్‌ల ప్రక్రియను అర్థం చేసుకోండి.',
-                    'course-4-title': 'క్లౌడ్ ఇంటిగ్రేషన్ & ఇ-లెర్నింగ్',
-                    'course-4-desc': 'డేటా నిర్వహణ మరియు డిజిటల్ వ్యవసాయ వనరుల కోసం క్లౌడ్ సాధనాలను ఉపయోగించండి.',
-                    'ai-chat-title': '✨ అగ్రి-జెమిని: తక్షణ పంట సలహాదారు',
-                    'ai-desc': 'వ్యవసాయ పద్ధతులు, మార్కెట్ ధోరణులు లేదా చీడపీడల నిర్వహణ గురించి నన్ను ఏదైనా అడగండి!',
-                    'sec-video-title': 'రైతుల కోసం వీడియోలు',
-                    'sec-video-p': 'పంట సాగు, నేల ఆరోగ్యం మరియు ఆధునిక వ్యవసాయ పద్ధతులపై ఈ ఉపయోగకరమైన వీడియోలను చూడండి.',
-                    'sec-scheme-title': 'రైతుల కోసం ప్రభుత్వ పథకాలు',
-                    'sec-scheme-p': 'రైతులకు మద్దతు ఇవ్వడానికి రూపొందించిన కొన్ని ముఖ్యమైన ప్రభుత్వ పథకాలు ఇక్కడ ఉన్నాయి. మరింత తెలుసుకోవడానికి మరియు దరఖాస్తు చేయడానికి లింక్‌లపై క్లిక్ చేయండి:',
-                    'scheme-1-desc': 'ప్రధాన మంత్రి కిసాన్ సమ్మాన్ నిధి (PM-KISAN) – రైతులకు ఏటా ₹6,000 ప్రత్యక్ష ఆదాయ మద్దతు.',
-                    'scheme-2-desc': 'ప్రధాన మంత్రి ఫసల్ బీమా యోజన (PMFBY) – ప్రకృతి వైపరీత్యాలకు వ్యతిరేకంగా రైతులకు పంట బీమా.',
-                    'scheme-3-desc': 'నేల ఆరోగ్య కార్డు పథకం – రైతులకు నేల ఆరోగ్య నివేదికలు మరియు సిఫార్సులను అందిస్తుంది.',
-                    'scheme-4-desc': 'వ్యవసాయ మౌలిక సదుపాయాల నిధి (AIF) – వ్యవసాయ మౌలిక సదుపాయాల అభివృద్ధికి ఆర్థిక మద్దతు.',
-                    'scheme-5-desc': 'జాతీయ వ్యవసాయ మార్కెట్ (eNAM) – రైతులు తమ ఉత్పత్తులను అమ్మడానికి ఆన్‌లైన్ ట్రేడింగ్ ప్లాట్‌ఫారమ్.',
-                    'sec-contact-title': 'మమ్మల్ని సంప్రదించండి',
-                    'contact-info-1': 'ఇమెయిల్: support@farmerplatform.in',
-                    'contact-info-2': 'హెల్ప్‌లైన్: +91 7393953233',
-                    'form-label-name': 'పేరు',
-                    'form-label-email': 'ఇమెయిల్',
-                    'form-label-message': 'సందేశం',
-                    'form-button-send': 'సందేశం పంపండి',
-                    'footer-copyright': '© 2025 డిజిటల్ మార్కెట్‌ప్లేస్ & రైతుల కోసం లెర్నింగ్ ప్లాట్‌ఫారమ్ | అన్ని హక్కులు రక్షించబడ్డాయి',
-                    'footer-visits': 'మొత్తం సందర్శనలు: ',
-                    'toast-success': 'సందేశం విజయవంతంగా పంపబడింది! మేము త్వరలో మిమ్మల్ని సంప్రదిస్తాము.',
-                    'toast-error-fields': 'దయచేసి మార్కెట్‌ప్లేస్ ఫీల్డ్‌లన్నింటినీ సరిగ్గా పూరించండి.',
-                    'toast-error-image': 'అమ్మడానికి ముందు దయచేసి ఉత్పత్తి ఫోటోను (స్టోరేజ్ లేదా కెమెరా నుండి) జోడించండి.',
-                    'toast-error-category': 'దయచేసి ఒక వర్గాన్ని ఎంచుకోండి: కూరగాయలు, పండ్లు, విత్తనాలు లేదా పనిముట్లు.',
-                    'toast-error-search': 'శోధించడానికి ఉత్పత్తి పేరును నమోదు చేయండి.',
-                    'alert-cart-add': (name) => `${name} కార్ట్‌కు జోడించబడింది!`,
-                    'alert-pay-success': (amount) => `₹${amount} చెల్లింపు విజయవంతమైంది! మీ కొనుగోలుకు ధన్యవాదాలు.`,
-                    'alert-pay-processing': (amount) => `₹${amount} చెల్లింపు ప్రాసెస్ చేయబడుతోంది...`,
-                    'alert-search': (name) => `మార్కెట్‌ప్లేస్‌లో "${name}" కోసం శోధిస్తోంది...`,
-                    'alert-empty-cart': 'మీ కార్ట్ ఖాళీగా ఉంది. చెల్లించడానికి ఏమీ లేదు.',
-                    'listen-label': 'వినండి',
-                    'steps-label': '✍️ అనుసరించాల్సిన దశలు:',
-                    'toast-sold-out': (qty, name) => `${name} యొక్క ${qty} యూనిట్లు మాత్రమే అందుబాటులో ఉన్నాయి.`,
-                    'nav-about': 'మా గురించి',
-                    'sec-about-title': 'AGRI दुनिया గురించి',
-                    'about-eyebrow': 'మా కథ',
-                    'about-headline': 'రైతులచే పండించబడింది. శ్రద్ధతో అందించబడింది.',
-                    'about-intro': 'మంచి ఆహారాన్ని పండించడానికి రైతులు కష్టపడతారు, కానీ అది కంచం చేరేసరికి, దాని విలువలో ఎక్కువ భాగం మట్టిని ఎప్పుడూ తాకని వారి చేతికి వెళ్తుంది. దీన్ని మార్చడానికే AGRI दुनिया ఏర్పడింది — రైతులు తాము పండించినది తినే వారికి నేరుగా అమ్మే వేదిక, వ్యవసాయం ఒంటరి పోరాటంగా కాకుండా ఒక భాగస్వామ్య ప్రయత్నంగా అనిపించే చోటు.',
-                    'about-what-title': 'మేము ఏం చేస్తాము',
-                    'about-what-1-title': 'నేరుగా అమ్మకం',
-                    'about-what-1-desc': 'రైతులు తమ ఉత్పత్తులను జాబితా చేసి వినియోగదారులకు నేరుగా అమ్ముతారు — మధ్యలో ఎలాంటి దళారీ వాటా ఉండదు.',
-                    'about-what-2-title': 'ముందుగానే ఆర్డర్ చేయండి',
-                    'about-what-2-desc': 'దూరాన్ని బట్టి, డెలివరీకి సుమారు 11–12 గంటల ముందు వినియోగదారులు ఆర్డర్ చేస్తారు, తద్వారా ఏమి కోయాలో రైతుకు ఖచ్చితంగా తెలుస్తుంది.',
-                    'about-what-3-title': 'వ్యవస్థీకృత సేకరణ',
-                    'about-what-3-desc': 'మా నియమిత టెంపో మరియు రవాణా బృందం రైతుల నుండి నేరుగా భారీగా ఉత్పత్తులను సేకరిస్తుంది.',
-                    'about-what-4-title': 'ఇరు వైపులా న్యాయమైన విలువ',
-                    'about-what-4-desc': 'అనవసర దళారీలను తొలగించడం వల్ల రైతులకు మెరుగైన రాబడి, వినియోగదారులకు మెరుగైన ధరలు లభిస్తాయి.',
-                    'about-how-title': 'మేము ఎలా పని చేస్తాము',
-                    'about-how-1-title': 'రైతు పంట కోస్తారు',
-                    'about-how-1-desc': 'నిజమైన ఆర్డర్లకు అనుగుణంగా కోసిన తాజా ఉత్పత్తులు — ఊహాజనితంగా కాదు.',
-                    'about-how-2-title': 'AGRI दुनिया సేకరిస్తుంది',
-                    'about-how-2-desc': 'మా టెంపో మరియు రవాణా బృందం రైతుల నుండి భారీగా ఉత్పత్తులను తీసుకువెళుతుంది.',
-                    'about-how-3-title': 'వర్గీకరణ & పంపిణీ',
-                    'about-how-3-desc': 'మా బృందం ఉత్పత్తులను వర్గీకరించి డెలివరీకి సిద్ధం చేస్తుంది.',
-                    'about-how-4-title': 'వినియోగదారుని చేరుకుంటుంది',
-                    'about-how-4-desc': 'తాజా ఉత్పత్తులు న్యాయమైన ధరకు కొనుగోలుదారుకు డెలివరీ చేయబడతాయి.',
-                    'about-beyond-title': 'మార్కెట్‌ప్లేస్‌కు మించి',
-                    'about-beyond-intro': 'AGRI दुनिया కేవలం కొనడానికి, అమ్మడానికి మాత్రమే ఉన్న స్థలం కాదు. అస్తవ్యస్తమైన మార్కెట్‌లో ఒంటరిగా పోటీపడే బదులు, రైతులు ఒకరికొకరు మద్దతు ఇచ్చుకునే సహకార తరహా రైతు సమాజాన్ని నిర్మించడానికి మేము కృషి చేస్తున్నాము.',
-                    'about-beyond-item-1': 'వ్యవసాయ పరికరాలను కొనండి మరియు అమ్మండి',
-                    'about-beyond-item-2': 'విత్తనాలు మరియు ఇతర వ్యవసాయ వనరులను కొనండి',
-                    'about-beyond-item-3': 'ఆధునిక వ్యవసాయ పద్ధతులను నేర్చుకోండి',
-                    'about-beyond-item-4': 'కొత్తగా ప్రారంభమైన ప్రభుత్వ పథకాల గురించి తెలుసుకోండి',
-                    'about-beyond-item-5': 'మరింత బాధ్యతాయుతమైన, స్థిరమైన వ్యవసాయ పద్ధతులను అనుసరించండి',
-                    'about-beyond-item-6': 'ఒంటరిగా కాకుండా సమాజంగా కలిసి పని చేయండి',
-                    'about-beyond-note': 'వ్యవసాయ రసాయనాల బాధ్యతాయుతమైన వినియోగాన్ని మరియు మెరుగైన వ్యవసాయ పద్ధతులను ప్రోత్సహించే ఒప్పందాలపై మేము రైతులతో కలిసి పని చేస్తున్నాము — ఆరోగ్యకరమైన నేల కోసం, ఆరోగ్యకరమైన ఆహారం కోసం.',
-                    'about-vision-title': 'మా దృష్టికోణం',
-                    'about-vision-desc': 'AGRI दुनिया కేవలం ఒక యాప్‌గా కాకుండా — ఉత్పత్తులు నేరుగా పొలం నుండి కుటుంబానికి చేరే, రైతులకు నమ్మకంతో ముందుకు సాగడానికి అవసరమైన సాధనాలు, జ్ఞానం మరియు మద్దతు లభించే వ్యవసాయ సమాజంగా ఉండాలని మేము కోరుకుంటున్నాము.',
-                    'about-cta-title': 'మీరు పండించినా, కొన్నా, ఇక్కడ మీకు ఒక స్థానం ఉంది.',
-                    'about-cta-btn': 'మార్కెట్‌ప్లేస్ చూడండి',
-                    'about-social-title': 'ఇన్‌స్టాగ్రామ్‌లో మమ్మల్ని ఫాలో అవ్వండి',
-                    'about-social-desc': 'తాజా పంటలు, రైతుల కథలు, మరియు AGRI दुनिया లో కొత్తేమిటో.'
-                },
-                'bn': {
-                    'header-title': 'অ্যাগ্রি দুনিয়া',
-                    'header-tagline': 'বাজার, জ্ঞান এবং সরকারি প্রকল্পে ডিজিটাল অ্যাক্সেসের মাধ্যমে কৃষকদের ক্ষমতায়ন',
-                    'nav-market': 'মার্কেটপ্লেস',
-                    'nav-myproducts': 'আমার পণ্য',
-                    'nav-learning': 'লার্নিং হাব',
-                    'nav-videos': 'ভিডিও',
-                    'nav-schemes': 'প্রকল্প',
-                    'nav-contact': 'যোগাযোগ',
-                    'sec-market-title': 'ডিজিটাল মার্কেটপ্লেস',
-                    'sec-market-p': 'সরাসরি কৃষি পণ্য কিনুন এবং বিক্রি করুন। কৃষকরা তাদের ফসল তালিকাভুক্ত করতে পারেন, এবং ক্রেতারা সরাসরি কিনতে পারেন, যা ন্যায্য বাণিজ্য নিশ্চিত করে।',
-                    'sec-myproducts-title': 'আমার পণ্য',
-                    'sec-myproducts-p': 'আপনি বিক্রির জন্য তালিকাভুক্ত পণ্যগুলি পরিচালনা করুন — ক্রেতারা এগুলি সরাসরি মার্কেটপ্লেস থেকে দেখতে ও কিনতে পারবেন।',
-                    'sell-title': 'আপনার পণ্য বিক্রি করুন',
-                    'sell-button': 'বিক্রির জন্য পোস্ট করুন',
-                    'sell-category-label': 'পণ্যের বিভাগ (আবশ্যক)',
-                    'category-option-default': '-- বিভাগ নির্বাচন করুন --',
-                    'category-option-vegetables': '🥦 সবজি',
-                    'category-option-fruits': '🍎 ফল',
-                    'category-option-seeds': '🌱 বীজ',
-                    'category-option-tools': '🛠️ সরঞ্জাম',
-                    'sell-image-label': 'পণ্যের ছবি যোগ করুন (আবশ্যক) 📷',
-                    'cart-title': 'আপনার কার্ট',
-                    'cart-empty': 'আপনার কার্ট খালি।',
-                    'sec-learning-title': 'লার্নিং হাব',
-                    'sec-learning-p': 'আমাদের প্ল্যাটফর্মের মাধ্যমে আধুনিক কৃষি কৌশল, উৎপাদনশীলতা উন্নতি এবং ফসল ব্যবস্থাপনা শিখুন।',
-                    'course-1-title': 'আধুনিক সেচ কৌশল',
-                    'course-1-desc': 'ড্রিপ এবং স্প্রিংকলার সিস্টেমের মাধ্যমে জলের ব্যবহার অপ্টিমাইজ করুন। স্মার্ট জল ব্যবস্থাপনা শিখুন।',
-                    'course-2-title': 'জৈব চাষ',
-                    'course-2-desc': 'প্রাকৃতিক, রাসায়নিকমুক্ত চাষাবাদ এবং মাটি সমৃদ্ধকরণের কৌশলে দক্ষতা অর্জন করুন।',
-                    'course-3-title': 'ফসল বীমা সচেতনতা',
-                    'course-3-desc': 'ঝুঁকির বিরুদ্ধে আপনার ফসল সুরক্ষিত রাখতে নীতির বিবরণ এবং দাবি প্রক্রিয়া বুঝুন।',
-                    'course-4-title': 'ক্লাউড ইন্টিগ্রেশন ও ই-লার্নিং',
-                    'course-4-desc': 'ডেটা ব্যবস্থাপনা এবং ডিজিটাল কৃষি সম্পদ অ্যাক্সেসের জন্য ক্লাউড টুল ব্যবহার করুন।',
-                    'ai-chat-title': '✨ অ্যাগ্রি-জেমিনি: তাৎক্ষণিক ফসল উপদেষ্টা',
-                    'ai-desc': 'কৃষি কৌশল, বাজারের প্রবণতা বা পোকামাকড় ব্যবস্থাপনা সম্পর্কে আমাকে যেকোনো কিছু জিজ্ঞাসা করুন!',
-                    'sec-video-title': 'কৃষকদের জন্য ভিডিও',
-                    'sec-video-p': 'ফসল চাষ, মাটির স্বাস্থ্য এবং আধুনিক কৃষি পদ্ধতি সম্পর্কিত এই সহায়ক ভিডিওগুলি দেখুন।',
-                    'sec-scheme-title': 'কৃষকদের জন্য সরকারি প্রকল্প',
-                    'sec-scheme-p': 'কৃষকদের সহায়তার জন্য ডিজাইন করা কিছু গুরুত্বপূর্ণ সরকারি প্রকল্প এখানে দেওয়া হলো। আরও জানতে এবং আবেদন করতে লিঙ্কে ক্লিক করুন:',
-                    'scheme-1-desc': 'প্রধানমন্ত্রী কিষান সম্মান নিধি (PM-KISAN) – কৃষকদের বার্ষিক ₹৬,০০০ সরাসরি আয় সহায়তা।',
-                    'scheme-2-desc': 'প্রধানমন্ত্রী ফসল বীমা যোজনা (PMFBY) – প্রাকৃতিক দুর্যোগের বিরুদ্ধে কৃষকদের জন্য ফসল বীমা।',
-                    'scheme-3-desc': 'মৃত্তিকা স্বাস্থ্য কার্ড প্রকল্প – কৃষকদের মাটির স্বাস্থ্য প্রতিবেদন এবং সুপারিশ প্রদান করে।',
-                    'scheme-4-desc': 'কৃষি অবকাঠামো তহবিল (AIF) – কৃষি অবকাঠামো উন্নয়নের জন্য আর্থিক সহায়তা।',
-                    'scheme-5-desc': 'জাতীয় কৃষি বাজার (eNAM) – কৃষকদের তাদের পণ্য বিক্রির জন্য অনলাইন ট্রেডিং প্ল্যাটফর্ম।',
-                    'sec-contact-title': 'যোগাযোগ করুন',
-                    'contact-info-1': 'ইমেইল: support@farmerplatform.in',
-                    'contact-info-2': 'হেল্পলাইন: +91 7393953233',
-                    'form-label-name': 'নাম',
-                    'form-label-email': 'ইমেইল',
-                    'form-label-message': 'বার্তা',
-                    'form-button-send': 'বার্তা পাঠান',
-                    'footer-copyright': '© 2025 ডিজিটাল মার্কেটপ্লেস ও কৃষকদের জন্য লার্নিং প্ল্যাটফর্ম | সর্বস্বত্ব সংরক্ষিত',
-                    'footer-visits': 'মোট ভিজিট: ',
-                    'toast-success': 'বার্তা সফলভাবে পাঠানো হয়েছে! আমরা শীঘ্রই আপনার সাথে যোগাযোগ করব।',
-                    'toast-error-fields': 'অনুগ্রহ করে মার্কেটপ্লেসের সব ক্ষেত্র সঠিকভাবে পূরণ করুন।',
-                    'toast-error-image': 'বিক্রি করার আগে অনুগ্রহ করে পণ্যের একটি ছবি (স্টোরেজ বা ক্যামেরা থেকে) যোগ করুন।',
-                    'toast-error-category': 'অনুগ্রহ করে একটি বিভাগ নির্বাচন করুন: সবজি, ফল, বীজ, বা সরঞ্জাম।',
-                    'toast-error-search': 'অনুসন্ধান করতে পণ্যের নাম লিখুন।',
-                    'alert-cart-add': (name) => `${name} কার্টে যোগ করা হয়েছে!`,
-                    'alert-pay-success': (amount) => `₹${amount} পেমেন্ট সফল হয়েছে! আপনার কেনাকাটার জন্য ধন্যবাদ।`,
-                    'alert-pay-processing': (amount) => `₹${amount} পেমেন্ট প্রক্রিয়াকরণ হচ্ছে...`,
-                    'alert-search': (name) => `মার্কেটপ্লেসে "${name}" অনুসন্ধান করা হচ্ছে...`,
-                    'alert-empty-cart': 'আপনার কার্ট খালি। পেমেন্ট করার কিছু নেই।',
-                    'listen-label': 'শুনুন',
-                    'steps-label': '✍️ অনুসরণ করার ধাপ:',
-                    'toast-sold-out': (qty, name) => `${name}-এর মাত্র ${qty}টি ইউনিট উপলব্ধ।`,
-                    'nav-about': 'আমাদের সম্পর্কে',
-                    'sec-about-title': 'AGRI दुनिया সম্পর্কে',
-                    'about-eyebrow': 'আমাদের গল্প',
-                    'about-headline': 'কৃষকদের দ্বারা ফলানো। যত্নসহকারে পৌঁছে দেওয়া।',
-                    'about-intro': 'ভালো খাবার ফলাতে কৃষকরা কঠোর পরিশ্রম করেন, কিন্তু তা থালায় পৌঁছানোর আগেই, তার বেশিরভাগ মূল্য চলে যায় তাদের কাছে যারা কখনো মাটি স্পর্শ করেননি। এটাই বদলাতে AGRI दुनिया তৈরি হয়েছে — এমন একটি প্ল্যাটফর্ম যেখানে কৃষকরা সরাসরি তাদের কাছে বিক্রি করেন যারা তাদের ফলানো খাবার খান, এবং যেখানে চাষবাস একা লড়াই না হয়ে একটি ভাগ করে নেওয়া প্রচেষ্টা হয়ে ওঠে।',
-                    'about-what-title': 'আমরা যা করি',
-                    'about-what-1-title': 'সরাসরি বিক্রি',
-                    'about-what-1-desc': 'কৃষকরা তাদের ফসল তালিকাভুক্ত করেন এবং সরাসরি ক্রেতাদের কাছে বিক্রি করেন — মাঝখানে কোনো ফড়িয়ার ভাগ নেই।',
-                    'about-what-2-title': 'আগে থেকে অর্ডার করুন',
-                    'about-what-2-desc': 'দূরত্বের উপর নির্ভর করে, ডেলিভারির প্রায় ১১–১২ ঘণ্টা আগে ক্রেতারা অর্ডার দেন, যাতে কৃষক ঠিক জানেন কী তুলতে হবে।',
-                    'about-what-3-title': 'সুসংগঠিত সংগ্রহ',
-                    'about-what-3-desc': 'আমাদের নির্ধারিত টেম্পো ও পরিবহন দল কৃষকদের কাছ থেকে সরাসরি বড় পরিমাণে ফসল সংগ্রহ করে।',
-                    'about-what-4-title': 'উভয় পক্ষের জন্য ন্যায্য মূল্য',
-                    'about-what-4-desc': 'অপ্রয়োজনীয় মধ্যস্বত্বভোগীদের বাদ দেওয়ার ফলে কৃষকরা ভালো আয় পান এবং ক্রেতারা ভালো দাম পান।',
-                    'about-how-title': 'আমরা কীভাবে কাজ করি',
-                    'about-how-1-title': 'কৃষক ফসল তোলেন',
-                    'about-how-1-desc': 'প্রকৃত অর্ডার অনুযায়ী তোলা তাজা ফসল — অনুমানের ভিত্তিতে নয়।',
-                    'about-how-2-title': 'AGRI दुनिया সংগ্রহ করে',
-                    'about-how-2-desc': 'আমাদের টেম্পো ও পরিবহন দল কৃষকদের কাছ থেকে বড় পরিমাণে ফসল নিয়ে যায়।',
-                    'about-how-3-title': 'বাছাই ও বিতরণ',
-                    'about-how-3-desc': 'আমাদের দল ফসল বাছাই করে ডেলিভারির জন্য প্রস্তুত করে।',
-                    'about-how-4-title': 'ক্রেতার কাছে পৌঁছায়',
-                    'about-how-4-desc': 'তাজা ফসল ন্যায্য মূল্যে ক্রেতার কাছে পৌঁছে দেওয়া হয়।',
-                    'about-beyond-title': 'মার্কেটপ্লেসের বাইরেও',
-                    'about-beyond-intro': 'AGRI दुनिया শুধু কেনা-বেচার জায়গা নয়। আমরা একটি সমবায়-ধাঁচের কৃষক সম্প্রদায় গড়ে তোলার দিকে কাজ করছি, যেখানে কৃষকরা অগোছালো বাজারে একা প্রতিযোগিতা না করে একে অপরকে সহায়তা করেন।',
-                    'about-beyond-item-1': 'কৃষি সরঞ্জাম কিনুন ও বিক্রি করুন',
-                    'about-beyond-item-2': 'বীজ ও অন্যান্য কৃষি উপকরণ কিনুন',
-                    'about-beyond-item-3': 'আধুনিক চাষাবাদের কৌশল শিখুন',
-                    'about-beyond-item-4': 'নতুন চালু হওয়া সরকারি প্রকল্প সম্পর্কে জানুন',
-                    'about-beyond-item-5': 'আরও দায়িত্বশীল, টেকসই চাষ পদ্ধতি অনুসরণ করুন',
-                    'about-beyond-item-6': 'একা নয়, একটি সম্প্রদায় হিসেবে একসাথে কাজ করুন',
-                    'about-beyond-note': 'আমরা কৃষকদের সঙ্গে এমন চুক্তি নিয়েও কাজ করছি যা কৃষি রাসায়নিকের দায়িত্বশীল ব্যবহার এবং উন্নত চাষ পদ্ধতিকে উৎসাহিত করে — সুস্থ মাটি এবং সুস্থ খাবারের জন্য।',
-                    'about-vision-title': 'আমাদের লক্ষ্য',
-                    'about-vision-desc': 'আমরা চাই AGRI दुनिया শুধু একটি অ্যাপ না হয়ে উঠুক — বরং এমন একটি কৃষক সম্প্রদায় হোক যেখানে ফসল সরাসরি ক্ষেত থেকে পরিবারে পৌঁছায়, এবং যেখানে কৃষকদের আত্মবিশ্বাসের সাথে এগিয়ে যাওয়ার জন্য প্রয়োজনীয় সরঞ্জাম, জ্ঞান ও সহায়তা থাকে।',
-                    'about-cta-title': 'আপনি ফলান বা কেনেন, এখানে আপনার জন্য জায়গা আছে।',
-                    'about-cta-btn': 'মার্কেটপ্লেস দেখুন',
-                    'about-social-title': 'ইনস্টাগ্রামে আমাদের ফলো করুন',
-                    'about-social-desc': 'তাজা ফসল, কৃষকদের গল্প, এবং AGRI दुनिया-তে নতুন কী আছে।'
-                }
-            };
-
-            function applyTranslation(lang) {
-                if (!SUPPORTED_LANGS.includes(lang)) lang = 'en';
-                currentLang = lang;
-                body.setAttribute('lang', lang);
-                langToggle.textContent = lang.toUpperCase();
-                langToggle.setAttribute('aria-label', `Change language (current: ${LANG_LABELS[lang]})`);
-
-                document.querySelectorAll('[data-key]').forEach(element => {
-                    const key = element.getAttribute('data-key');
-                    const text = translations[lang] && translations[lang][key];
-                    if (text && typeof text === 'string') {
-                        element.textContent = text;
-                    }
-                });
-
-                
-                        displayCart(); 
-                        renderNotifications();
-
-                const initialChatText = INITIAL_CHAT_TEXT[lang] || INITIAL_CHAT_TEXT.en;
-                const initialChatBubble = document.querySelector('#chatHistory .chat-message.ai .message-bubble');
-                if (initialChatBubble) {
-                    initialChatBubble.textContent = initialChatText;
-                }
-
-                if (langMenu) {
-                    langMenu.querySelectorAll('[data-lang]').forEach(btn => {
-                        btn.classList.toggle('active', btn.getAttribute('data-lang') === lang);
-                    });
-                }
-
-                stopPlayback();
-            }
-
-            // build lang dropdown from SUPPORTED_LANGS/LANG_LABELS
-            const langMenu = document.getElementById('langMenu');
-            if (langMenu) {
-                langMenu.innerHTML = SUPPORTED_LANGS.map(code =>
-                    `<button type="button" class="lang-menu-item" data-lang="${code}">${LANG_LABELS[code]}</button>`
-                ).join('');
-
-                langMenu.addEventListener('click', (e) => {
-                    const btn = e.target.closest('[data-lang]');
-                    if (!btn) return;
-                    const newLang = btn.getAttribute('data-lang');
-                    localStorage.setItem('language', newLang);
-                    applyTranslation(newLang);
-                    if (techniqueModal.classList.contains('visible')) {
-                        openTechniqueModal(techniqueModal.getAttribute('data-topic'));
-                    }
-                    langMenu.classList.remove('open');
-                });
-            }
-
-            langToggle.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (langMenu) langMenu.classList.toggle('open');
-            });
-
-            document.addEventListener('click', (e) => {
-                if (langMenu && langMenu.classList.contains('open') && !langMenu.contains(e.target) && e.target !== langToggle) {
-                    langMenu.classList.remove('open');
-                }
-            });
-
-            const savedLang = localStorage.getItem('language') || 'en';
-            applyTranslation(savedLang);
-
-            // "tap to see easy guide" learning modal
-            const learningGuides = {
-                irrigation: {
-                    courseNum: 1,
-                    emoji: '💧',
-                    diagram: ['🚰', '⚙️', '💧', '🌱'],
-                    steps: [
-                        { icon: '👉', en: 'Check your soil before watering — dig down about 2 inches; only water if it feels dry.', hi: 'पानी देने से पहले मिट्टी जांचें — करीब 2 इंच खोदकर देखें; अगर सूखी लगे तभी पानी दें।', ta: 'நீர் பாய்ச்சுவதற்கு முன் மண்ணை சரிபார்க்கவும் — சுமார் 2 அங்குலம் தோண்டிப் பாருங்கள்; உலர்ந்திருந்தால் மட்டும் நீர் பாய்ச்சவும்.', te: 'నీళ్లు పోసే ముందు మీ నేలను తనిఖీ చేయండి — దాదాపు 2 అంగుళాలు తవ్వి చూడండి; పొడిగా అనిపిస్తేనే నీళ్లు పోయండి.', bn: 'জল দেওয়ার আগে মাটি পরীক্ষা করুন — প্রায় ২ ইঞ্চি খুঁড়ে দেখুন; শুকনো মনে হলেই জল দিন।' },
-                        { icon: '🚿', en: 'Install drip lines or micro-sprinklers along the crop rows instead of flooding the field.', hi: 'खेत में पानी भरने की जगह फसल की कतारों में ड्रिप लाइन या माइक्रो-स्प्रिंकलर लगाएं।', ta: 'வயலில் நீர் நிரப்புவதற்குப் பதிலாக பயிர் வரிசைகளில் சொட்டு நீர் குழாய்கள் அல்லது மைக்ரோ-ஸ்பிரிங்க்லர்களை பொருத்தவும்.', te: 'పొలాన్ని నీటితో నింపడానికి బదులుగా పంట వరుసల వెంట డ్రిప్ లైన్లు లేదా మైక్రో-స్ప్రింక్లర్లను అమర్చండి.', bn: 'জমি প্লাবিত করার পরিবর্তে ফসলের সারি বরাবর ড্রিপ লাইন বা মাইক্রো-স্প্রিংকলার বসান।' },
-                        { icon: '⏰', en: 'Water early morning or evening to reduce loss from evaporation.', hi: 'वाष्पीकरण से बचाव के लिए सुबह जल्दी या शाम को पानी दें।', ta: 'ஆவியாதலால் ஏற்படும் இழப்பைக் குறைக்க அதிகாலை அல்லது மாலையில் நீர் பாய்ச்சவும்.', te: 'ఆవిరి కావడం వల్ల నష్టాన్ని తగ్గించడానికి ఉదయం లేదా సాయంత్రం నీళ్లు పోయండి.', bn: 'বাষ্পীভবনের কারণে ক্ষতি কমাতে ভোরে বা সন্ধ্যায় জল দিন।' },
-                        { icon: '🔧', en: 'Check pipes and drip emitters every week for leaks or blockages.', hi: 'हर हफ्ते पाइप और ड्रिप एमिटर में रिसाव या रुकावट की जांच करें।', ta: 'கசிவு அல்லது அடைப்புகளுக்காக ஒவ்வொரு வாரமும் குழாய்கள் மற்றும் சொட்டு உமிழிகளை சரிபார்க்கவும்.', te: 'లీకేజీలు లేదా అడ్డంకుల కోసం ప్రతి వారం పైపులు మరియు డ్రిప్ ఎమిటర్లను తనిఖీ చేయండి.', bn: 'ফুটো বা বাধার জন্য প্রতি সপ্তাহে পাইপ এবং ড্রিপ এমিটার পরীক্ষা করুন।' },
-                        { icon: '📊', en: 'Keep a simple weekly note of water used to see how much you are saving.', hi: 'बचत देखने के लिए हर हफ्ते इस्तेमाल हुए पानी का हिसाब रखें।', ta: 'எவ்வளவு சேமிக்கிறீர்கள் என்பதைப் பார்க்க பயன்படுத்தப்பட்ட நீரின் எளிய வாராந்திர குறிப்பை வைத்திருங்கள்.', te: 'మీరు ఎంత ఆదా చేస్తున్నారో చూడటానికి ఉపయోగించిన నీటి గురించి సాధారణ వారపు గమనిక ఉంచండి.', bn: 'কতটা সাশ্রয় হচ্ছে তা দেখতে ব্যবহৃত জলের একটি সহজ সাপ্তাহিক হিসাব রাখুন।' }
-                    ],
-                    tip: { en: 'Drip irrigation can cut water use by 40–60% compared to flood irrigation, while also improving crop yield.', hi: 'खेत में पानी भरने की तुलना में ड्रिप सिंचाई से 40–60% तक पानी बचता है और फसल की पैदावार भी बढ़ती है।', ta: 'வெள்ள நீர்ப்பாசனத்துடன் ஒப்பிடும்போது சொட்டு நீர்ப்பாசனம் 40–60% நீர் பயன்பாட்டைக் குறைக்கும், மேலும் பயிர் விளைச்சலையும் மேம்படுத்தும்.', te: 'వరద నీటిపారుదలతో పోలిస్తే డ్రిప్ ఇరిగేషన్ నీటి వినియోగాన్ని 40–60% తగ్గించగలదు, అలాగే పంట దిగుబడిని కూడా మెరుగుపరుస్తుంది.', bn: 'বন্যা সেচের তুলনায় ড্রিপ সেচ জলের ব্যবহার ৪০–৬০% কমাতে পারে, পাশাপাশি ফসলের ফলনও বাড়ায়।' }
-                },
-                organic: {
-                    courseNum: 2,
-                    emoji: '🌿',
-                    diagram: ['🍂', '🪱', '🌱', '🥦'],
-                    steps: [
-                        { icon: '🍂', en: 'Start a compost pit with crop waste, dry leaves, and cow dung — turn it every 2 weeks.', hi: 'फसल अवशेष, सूखी पत्तियों और गोबर से खाद का गड्ढा बनाएं — हर 2 हफ्ते में पलटें।', ta: 'பயிர் கழிவு, உலர்ந்த இலைகள் மற்றும் சாணத்துடன் உரக்குழி தொடங்குங்கள் — ஒவ்வொரு 2 வாரங்களுக்கும் புரட்டவும்.', te: 'పంట వ్యర్థాలు, ఎండిన ఆకులు మరియు ఆవు పేడతో కంపోస్ట్ గుంట మొదలుపెట్టండి — ప్రతి 2 వారాలకు తిప్పండి.', bn: 'ফসলের বর্জ্য, শুকনো পাতা এবং গোবর দিয়ে একটি কম্পোস্ট গর্ত শুরু করুন — প্রতি ২ সপ্তাহে উল্টান।' },
-                        { icon: '🪱', en: 'Use vermicompost or biofertilizers in place of chemical fertilizers.', hi: 'रासायनिक खाद की जगह वर्मीकम्पोस्ट या जैव-उर्वरक का उपयोग करें।', ta: 'ரசாயன உரங்களுக்குப் பதிலாக மண்புழு உரம் அல்லது உயிர்-உரங்களைப் பயன்படுத்துங்கள்.', te: 'రసాయన ఎరువులకు బదులుగా వర్మీకంపోస్ట్ లేదా జీవ ఎరువులను ఉపయోగించండి.', bn: 'রাসায়নিক সারের পরিবর্তে ভার্মিকম্পোস্ট বা জৈব সার ব্যবহার করুন।' },
-                        { icon: '🌼', en: 'Rotate crops and try intercropping to keep the soil\'s nutrients balanced.', hi: 'मिट्टी के पोषक तत्व संतुलित रखने के लिए फसल चक्र और अंतर-फसल अपनाएं।', ta: 'மண்ணின் ஊட்டச்சத்துக்களை சமநிலையில் வைத்திருக்க பயிர் சுழற்சி மற்றும் இடைப்பயிரிடலை முயற்சிக்கவும்.', te: 'నేల పోషకాలను సమతుల్యంగా ఉంచడానికి పంట మార్పిడి మరియు అంతర పంటలను ప్రయత్నించండి.', bn: 'মাটির পুষ্টি সুষম রাখতে ফসল আবর্তন এবং আন্তঃফসল চেষ্টা করুন।' },
-                        { icon: '🐞', en: 'Control pests with neem oil spray or companion planting instead of chemical pesticides.', hi: 'रासायनिक कीटनाशक की जगह नीम के तेल का छिड़काव या साथी-रोपण अपनाएं।', ta: 'ரசாயன பூச்சிக்கொல்லிகளுக்குப் பதிலாக வேப்ப எண்ணெய் தெளிப்பு அல்லது துணை-நடவு மூலம் பூச்சிகளைக் கட்டுப்படுத்துங்கள்.', te: 'రసాయన పురుగుమందులకు బదులుగా వేప నూనె స్ప్రే లేదా సహచర పెంపకంతో పురుగులను నియంత్రించండి.', bn: 'রাসায়নিক কীটনাশকের পরিবর্তে নিম তেল স্প্রে বা সহচর রোপণের মাধ্যমে পোকা নিয়ন্ত্রণ করুন।' },
-                        { icon: '📜', en: 'Once your field stays chemical-free for the required period, apply for organic certification to sell at better prices.', hi: 'खेत पूरी तरह रसायन-मुक्त होने के बाद बेहतर दाम पाने के लिए ऑर्गेनिक प्रमाणन के लिए आवेदन करें।', ta: 'உங்கள் வயல் தேவையான காலத்திற்கு ரசாயனமில்லாமல் இருந்தவுடன், சிறந்த விலைக்கு விற்க கரிம சான்றிதழுக்கு விண்ணப்பிக்கவும்.', te: 'మీ పొలం అవసరమైన కాలం పాటు రసాయన రహితంగా ఉన్న తర్వాత, మెరుగైన ధరలకు అమ్మడానికి సేంద్రీయ ధృవీకరణ కోసం దరఖాస్తు చేసుకోండి.', bn: 'আপনার জমি প্রয়োজনীয় সময়ের জন্য রাসায়নিকমুক্ত থাকলে, ভালো দামে বিক্রির জন্য জৈব সার্টিফিকেশনের জন্য আবেদন করুন।' }
-                    ],
-                    tip: { en: 'Healthy, organic-rich soil holds more water and needs fewer inputs season after season.', hi: 'जैविक तत्वों से भरपूर स्वस्थ मिट्टी अधिक पानी रोकती है और हर मौसम में कम खाद-दवा की जरूरत पड़ती है।', ta: 'ஆரோக்கியமான, கரிமச்சத்து நிறைந்த மண் அதிக நீரைத் தக்கவைத்து, ஒவ்வொரு பருவத்திலும் குறைவான உள்ளீடுகளைத் தேவைப்படுத்தும்.', te: 'ఆరోగ్యకరమైన, సేంద్రీయ సమృద్ధిగల నేల ఎక్కువ నీటిని పట్టుకుంటుంది మరియు ప్రతి సీజన్‌లో తక్కువ ఇన్‌పుట్‌లు అవసరం.', bn: 'স্বাস্থ্যকর, জৈব-সমৃদ্ধ মাটি বেশি জল ধরে রাখে এবং মৌসুমের পর মৌসুম কম উপকরণের প্রয়োজন হয়।' }
-                },
-                insurance: {
-                    courseNum: 3,
-                    emoji: '🛡️',
-                    diagram: ['🌾', '⚠️', '🛡️', '💰'],
-                    steps: [
-                        { icon: '📝', en: 'Enroll in Pradhan Mantri Fasal Bima Yojana (PMFBY) before the cut-off date for your crop season.', hi: 'अपने फसल सीजन की अंतिम तिथि से पहले प्रधानमंत्री फसल बीमा योजना (PMFBY) में नामांकन करें।', ta: 'உங்கள் பயிர் பருவத்தின் கடைசி தேதிக்கு முன் பிரதான் மந்திரி பசல் பீமா யோஜனாவில் (PMFBY) பதிவு செய்யுங்கள்.', te: 'మీ పంట సీజన్ చివరి తేదీకి ముందు ప్రధాన మంత్రి ఫసల్ బీమా యోజన (PMFBY)లో నమోదు చేసుకోండి.', bn: 'আপনার ফসলের মৌসুমের শেষ তারিখের আগে প্রধানমন্ত্রী ফসল বীমা যোজনায় (PMFBY) নথিভুক্ত করুন।' },
-                        { icon: '🏦', en: 'You pay only a small share of the premium — the government covers the rest.', hi: 'आपको प्रीमियम का बहुत छोटा हिस्सा ही देना होता है — बाकी सरकार वहन करती है।', ta: 'நீங்கள் பிரீமியத்தில் ஒரு சிறிய பங்கை மட்டுமே செலுத்துகிறீர்கள் — மீதமுள்ளதை அரசு ஏற்கிறது.', te: 'మీరు ప్రీమియంలో కేవలం చిన్న భాగాన్ని మాత్రమే చెల్లిస్తారు — మిగిలినది ప్రభుత్వం భరిస్తుంది.', bn: 'আপনি প্রিমিয়ামের শুধু একটি ছোট অংশ প্রদান করেন — বাকিটা সরকার বহন করে।' },
-                        { icon: '🌪️', en: 'If your crop is damaged by drought, flood, pests, or disease, report it to your bank or insurer within 72 hours.', hi: 'सूखा, बाढ़, कीट या रोग से फसल खराब होने पर 72 घंटे के अंदर बैंक या बीमा कंपनी को सूचित करें।', ta: 'வறட்சி, வெள்ளம், பூச்சி அல்லது நோயால் உங்கள் பயிர் சேதமடைந்தால், 72 மணி நேரத்திற்குள் உங்கள் வங்கி அல்லது காப்பீட்டாளரிடம் தெரிவிக்கவும்.', te: 'కరువు, వరద, పురుగులు లేదా వ్యాధి వల్ల మీ పంట దెబ్బతింటే, 72 గంటల్లోపు మీ బ్యాంకుకు లేదా బీమా సంస్థకు తెలియజేయండి.', bn: 'খরা, বন্যা, পোকামাকড় বা রোগে আপনার ফসল ক্ষতিগ্রস্ত হলে, ৭২ ঘণ্টার মধ্যে আপনার ব্যাংক বা বীমাকারীকে জানান।' },
-                        { icon: '📸', en: 'Take clear photos of the damaged field as proof when you report the loss.', hi: 'नुकसान की सूचना देते समय खराब फसल की स्पष्ट तस्वीरें सबूत के तौर पर लें।', ta: 'இழப்பைப் புகாரளிக்கும்போது சேதமடைந்த வயலின் தெளிவான புகைப்படங்களை ஆதாரமாக எடுக்கவும்.', te: 'నష్టాన్ని నివేదించేటప్పుడు దెబ్బతిన్న పొలం యొక్క స్పష్టమైన ఫోటోలను రుజువుగా తీయండి.', bn: 'ক্ষতির প্রতিবেদন করার সময় ক্ষতিগ্রস্ত জমির স্পষ্ট ছবি প্রমাণ হিসেবে তুলুন।' },
-                        { icon: '💵', en: 'After assessment, the claim amount is usually paid directly into your linked bank account.', hi: 'आकलन के बाद दावे की राशि आमतौर पर सीधे आपके जुड़े बैंक खाते में भेजी जाती है।', ta: 'மதிப்பீட்டிற்குப் பிறகு, உரிமைகோரல் தொகை பொதுவாக உங்கள் இணைக்கப்பட்ட வங்கிக் கணக்கில் நேரடியாக செலுத்தப்படும்.', te: 'మదింపు తర్వాత, క్లెయిమ్ మొత్తం సాధారణంగా మీ లింక్ చేసిన బ్యాంకు ఖాతాలో నేరుగా చెల్లించబడుతుంది.', bn: 'মূল্যায়নের পর, দাবির পরিমাণ সাধারণত সরাসরি আপনার সংযুক্ত ব্যাংক অ্যাকাউন্টে প্রদান করা হয়।' }
-                    ],
-                    tip: { en: 'Keep your Aadhaar, land records, and bank details updated — mismatched details are the most common reason claims get delayed.', hi: 'अपना आधार, भूमि रिकॉर्ड और बैंक विवरण अपडेट रखें — जानकारी न मिलने से ही ज़्यादातर दावों में देरी होती है।', ta: 'உங்கள் ஆதார், நில பதிவுகள் மற்றும் வங்கி விவரங்களை புதுப்பித்து வைத்திருங்கள் — பொருந்தாத விவரங்களே உரிமைகோரல் தாமதத்திற்கு பொதுவான காரணம்.', te: 'మీ ఆధార్, భూమి రికార్డులు మరియు బ్యాంకు వివరాలను తాజాగా ఉంచుకోండి — సరిపోలని వివరాలే క్లెయిమ్‌లు ఆలస్యం కావడానికి అత్యంత సాధారణ కారణం.', bn: 'আপনার আধার, জমির রেকর্ড এবং ব্যাংক বিবরণ আপডেট রাখুন — অমিল বিবরণই দাবি বিলম্বের সবচেয়ে সাধারণ কারণ।' }
-                },
-                cloud: {
-                    courseNum: 4,
-                    emoji: '☁️',
-                    diagram: ['📱', '☁️', '📊', '🎓'],
-                    steps: [
-                        { icon: '📱', en: 'Use a smartphone or your nearest CSC (Common Service Centre) to access government agri-portals and apps.', hi: 'सरकारी कृषि पोर्टल और ऐप तक पहुंचने के लिए स्मार्टफोन या नज़दीकी CSC (कॉमन सर्विस सेंटर) का उपयोग करें।', ta: 'அரசு வேளாண் போர்டல்கள் மற்றும் ஆப்ஸை அணுக ஸ்மார்ட்போன் அல்லது உங்களுக்கு அருகிலுள்ள CSC (பொது சேவை மையம்) பயன்படுத்துங்கள்.', te: 'ప్రభుత్వ వ్యవసాయ పోర్టల్‌లు మరియు యాప్‌లను యాక్సెస్ చేయడానికి స్మార్ట్‌ఫోన్ లేదా మీకు దగ్గరలోని CSC (కామన్ సర్వీస్ సెంటర్) ఉపయోగించండి.', bn: 'সরকারি কৃষি পোর্টাল ও অ্যাপ ব্যবহার করতে স্মার্টফোন বা আপনার নিকটতম CSC (কমন সার্ভিস সেন্টার) ব্যবহার করুন।' },
-                        { icon: '☁️', en: 'Save your soil health reports, insurance papers, and land records online so they are never lost.', hi: 'मिट्टी स्वास्थ्य रिपोर्ट, बीमा कागज़ात और भूमि रिकॉर्ड को ऑनलाइन सुरक्षित रखें ताकि वे कभी न खोएं।', ta: 'உங்கள் மண் ஆரோக்கிய அறிக்கைகள், காப்பீட்டு ஆவணங்கள் மற்றும் நில பதிவுகளை ஆன்லைனில் சேமித்து வையுங்கள், அவை ஒருபோதும் தொலைந்துவிடாது.', te: 'మీ నేల ఆరోగ్య నివేదికలు, బీమా పత్రాలు మరియు భూమి రికార్డులను ఆన్‌లైన్‌లో సేవ్ చేయండి, తద్వారా అవి ఎప్పటికీ పోవు.', bn: 'আপনার মাটির স্বাস্থ্য প্রতিবেদন, বীমার কাগজপত্র এবং জমির রেকর্ড অনলাইনে সংরক্ষণ করুন যাতে সেগুলো কখনো হারিয়ে না যায়।' },
-                        { icon: '📊', en: 'Check mandi (market) prices online before deciding when and where to sell your produce.', hi: 'उपज कब और कहां बेचनी है, यह तय करने से पहले मंडी के भाव ऑनलाइन जांच लें।', ta: 'உங்கள் விளைபொருளை எப்போது, எங்கு விற்பது என்பதை முடிவு செய்யும் முன் மண்டி (சந்தை) விலைகளை ஆன்லைனில் சரிபார்க்கவும்.', te: 'మీ ఉత్పత్తిని ఎప్పుడు, ఎక్కడ అమ్మాలో నిర్ణయించే ముందు మండి (మార్కెట్) ధరలను ఆన్‌లైన్‌లో తనిఖీ చేయండి.', bn: 'আপনার ফসল কখন এবং কোথায় বিক্রি করবেন তা ঠিক করার আগে অনলাইনে মান্ডি (বাজার) দাম পরীক্ষা করুন।' },
-                        { icon: '🎓', en: 'Watch free e-learning videos and webinars from agricultural universities (KVK) to learn new techniques.', hi: 'नई तकनीकें सीखने के लिए कृषि विश्वविद्यालयों (KVK) के मुफ्त ई-लर्निंग वीडियो और वेबिनार देखें।', ta: 'புதிய நுட்பங்களைக் கற்க வேளாண் பல்கலைக்கழகங்களின் (KVK) இலவச இ-கற்றல் வீடியோக்கள் மற்றும் வெபினார்களைப் பாருங்கள்.', te: 'కొత్త పద్ధతులను నేర్చుకోవడానికి వ్యవసాయ విశ్వవిద్యాలయాల (KVK) ఉచిత ఇ-లెర్నింగ్ వీడియోలు మరియు వెబినార్‌లను చూడండి.', bn: 'নতুন কৌশল শিখতে কৃষি বিশ্ববিদ্যালয়ের (KVK) বিনামূল্যে ই-লার্নিং ভিডিও এবং ওয়েবিনার দেখুন।' },
-                        { icon: '🔔', en: 'Turn on SMS or app alerts for weather warnings and scheme deadlines.', hi: 'मौसम की चेतावनी और योजनाओं की अंतिम तिथि के लिए SMS या ऐप अलर्ट चालू करें।', ta: 'வானிலை எச்சரிக்கைகள் மற்றும் திட்ட காலக்கெடுவுக்கான SMS அல்லது ஆப் அறிவிப்புகளை இயக்கவும்.', te: 'వాతావరణ హెచ్చరికలు మరియు పథకం గడువుల కోసం SMS లేదా యాప్ అలర్ట్‌లను ఆన్ చేయండి.', bn: 'আবহাওয়ার সতর্কতা এবং প্রকল্পের শেষ তারিখের জন্য SMS বা অ্যাপ অ্যালার্ট চালু করুন।' }
-                    ],
-                    tip: { en: 'A free app like Kisan Suvidha or eNAM puts market prices and weather alerts right in your pocket.', hi: 'किसान सुविधा या ई-नाम जैसे मुफ्त ऐप से बाज़ार भाव और मौसम अलर्ट सीधे आपकी जेब में मिलते हैं।', ta: 'கிசான் சுவிதா அல்லது eNAM போன்ற இலவச ஆப் சந்தை விலைகள் மற்றும் வானிலை எச்சரிக்கைகளை உங்கள் பாக்கெட்டிலேயே தருகிறது.', te: 'కిసాన్ సువిధ లేదా eNAM వంటి ఉచిత యాప్ మార్కెట్ ధరలు మరియు వాతావరణ హెచ్చరికలను నేరుగా మీ జేబులో ఉంచుతుంది.', bn: 'কিষান সুবিধা বা eNAM-এর মতো একটি বিনামূল্যের অ্যাপ বাজারের দাম এবং আবহাওয়ার সতর্কতা সরাসরি আপনার পকেটে নিয়ে আসে।' }
-                }
-            };
-
-            const techniqueOverlay = document.getElementById('techniqueOverlay');
-            const techniqueModal = document.getElementById('techniqueModal');
-            const techniqueEmoji = document.getElementById('techniqueEmoji');
-            const techniqueModalTitle = document.getElementById('techniqueModalTitle');
-            const techniqueDiagram = document.getElementById('techniqueDiagram');
-            const techniqueSteps = document.getElementById('techniqueSteps');
-            const techniqueTip = document.getElementById('techniqueTip');
-            const techniqueListenBtn = document.getElementById('techniqueListenBtn');
-
-            function openTechniqueModal(topic) {
-                const guide = learningGuides[topic];
-                if (!guide) return;
-
-                techniqueEmoji.textContent = guide.emoji;
-                techniqueModalTitle.textContent = translations[currentLang][`course-${guide.courseNum}-title`];
-
-                techniqueDiagram.innerHTML = guide.diagram
-                    .map((node, i) => `<div class="diagram-node">${node}</div>` + (i < guide.diagram.length - 1 ? `<span class="diagram-arrow">→</span>` : ''))
-                    .join('');
-
-                techniqueSteps.innerHTML = guide.steps
-                    .map((step, i) => `
-                        <div class="technique-step">
-                            <span class="step-num">${i + 1}</span>
-                            <span class="step-icon">${step.icon}</span>
-                            <span>${step[currentLang] || step.en}</span>
-                        </div>
-                    `).join('');
-
-                techniqueTip.textContent = '💡 ' + (guide.tip[currentLang] || guide.tip.en);
-
-                techniqueModal.setAttribute('data-topic', topic);
-                techniqueOverlay.classList.add('visible');
-                techniqueModal.classList.add('visible');
-                document.body.style.overflow = 'hidden';
-            }
-
-            window.closeTechniqueModal = function () {
-                stopPlayback();
-                techniqueOverlay.classList.remove('visible');
-                techniqueModal.classList.remove('visible');
-                document.body.style.overflow = '';
-            };
-
-            document.querySelectorAll('.learning-card').forEach(card => {
-                card.addEventListener('click', () => openTechniqueModal(card.getAttribute('data-topic')));
-                card.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        openTechniqueModal(card.getAttribute('data-topic'));
-                    }
-                });
-            });
-
-            techniqueListenBtn.addEventListener('click', () => {
-                if (techniqueListenBtn.classList.contains('speaking')) {
-                    stopPlayback();
-                    return;
-                } else if (!audioEl.paused) {
-                    stopPlayback();
-                }
-
-                let content = '';
-                techniqueModal.querySelectorAll('h3, .technique-step, .technique-tip').forEach(el => {
-                    content += el.textContent.trim() + '. ';
-                });
-                speakText(techniqueListenBtn, content);
-            });
-
-            const contactForm = document.getElementById('contactForm');
-
-            
-            contactForm.addEventListener('submit', function (e) {
-                e.preventDefault();
-                
-                console.log('Form Data Submitted:', {
-                    name: document.getElementById('contactName').value,
-                    email: document.getElementById('contactEmail').value,
-                    message: document.getElementById('contactMessage').value
-                });
-
-                showToast(translations[currentLang]['toast-success'], true);
-
-                contactForm.reset();
-            });
-            const sellButton = document.getElementById('postForSaleBtn');
-
-            const sellImageInput = document.getElementById('sellImage');
-            const sellImagePreview = document.getElementById('sellImagePreview');
-            let sellImageDataUrl = '';
-
-            sellImageInput.addEventListener('change', async () => {
-                const file = sellImageInput.files[0];
-                if (!file) {
-                    sellImageDataUrl = '';
-                    sellImagePreview.style.display = 'none';
-                    return;
-                }
-                try {
-                    // compress so it fits firestore's 1mb limit
-                    sellImageDataUrl = await compressImageFile(file);
-                    sellImagePreview.src = sellImageDataUrl;
-                    sellImagePreview.style.display = 'block';
-                } catch (err) {
-                    console.error('Failed to process image:', err);
-                    showToast('Could not process that photo. Please try a different image.', false);
-                    sellImageDataUrl = '';
-                    sellImagePreview.style.display = 'none';
-                }
-            });
-
-            sellButton.addEventListener('click', function () {
-                const name = document.getElementById('sellName').value.trim();
-                const qty = document.getElementById('sellQty').value;
-                const price = document.getElementById('sellPrice').value;
-                const category = document.getElementById('sellCategory').value;
-                const description = document.getElementById('sellDescription').value.trim();
-                if (!ALLOWED_PRODUCT_CATEGORIES.includes(category)) {
-                    showToast(translations[currentLang]['toast-error-category'], false);
-                    return;
-                }
-                if (!sellImageDataUrl) {
-                    showToast(translations[currentLang]['toast-error-image'], false);
-                    return;
-                }
-                addProductListing(name, qty, price, sellImageDataUrl, category, description);
-                document.getElementById('sellName').value = "";
-                document.getElementById('sellQty').value = "";
-                document.getElementById('sellPrice').value = "";
-                document.getElementById('sellCategory').value = "";
-                document.getElementById('sellDescription').value = "";
-                sellImageInput.value = "";
-                sellImageDataUrl = '';
-                sellImagePreview.style.display = 'none';
-                sellImagePreview.src = '';
-            });
-
-            const chatInput = document.getElementById("chatInput");
-            const sendChatBtn = document.getElementById("sendChatBtn");
-
-            const handleChat = () => {
-                const prompt = chatInput.value.trim();
-                if (prompt) {
-                    appendMessage("user", prompt);
-                    chatInput.value = "";
-                    askAgriGemini(prompt);
-                }
-            };
-
-            sendChatBtn.addEventListener('click', handleChat);
-            chatInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleChat();
-                }
-            });
-
-            const drawerOverlay = document.getElementById('drawerOverlay');
-            const drawer = document.getElementById('buySellDrawer');
-            const drawerTitle = document.getElementById('drawerTitle');
-            const drawerInstruction = document.getElementById('drawerInstruction');
-            const drawerPriceInput = document.getElementById('drawerPrice');
-            const drawerActionBtn = document.getElementById('drawerActionBtn');
-            const drawerImageLabel = document.getElementById('drawerImageLabel');
-            const drawerImageInput = document.getElementById('drawerImage');
-            const drawerImagePreview = document.getElementById('drawerImagePreview');
-            const drawerCategoryLabel = document.getElementById('drawerCategoryLabel');
-            const drawerCategorySelect = document.getElementById('drawerCategory');
-            const drawerDescriptionLabel = document.getElementById('drawerDescriptionLabel');
-            const drawerDescriptionInput = document.getElementById('drawerDescription');
-            let drawerImageDataUrl = '';
-
-            drawerImageInput.addEventListener('change', async () => {
-                const file = drawerImageInput.files[0];
-                if (!file) {
-                    drawerImageDataUrl = '';
-                    drawerImagePreview.style.display = 'none';
-                    return;
-                }
-                try {
-                    drawerImageDataUrl = await compressImageFile(file);
-                    drawerImagePreview.src = drawerImageDataUrl;
-                    drawerImagePreview.style.display = 'block';
-                } catch (err) {
-                    console.error('Failed to process image:', err);
-                    showToast('Could not process that photo. Please try a different image.', false);
-                    drawerImageDataUrl = '';
-                    drawerImagePreview.style.display = 'none';
-                }
-            });
-
-            function openDrawer(type) {
-                const isBuy = type === 'buy';
-                drawerTitle.textContent = isBuy ? 'Quick Buy Product' : 'Quick Sell Product';
-                drawerInstruction.textContent = isBuy 
-                    ? 'Enter the product you want to buy and add it to your cart (mock transaction).'
-                    : 'Enter the product you want to sell, set a price, and add a photo (mock listing).';
-                
-                drawerPriceInput.style.display = isBuy ? 'none' : 'block';
-                drawerCategoryLabel.style.display = isBuy ? 'none' : 'block';
-                drawerCategorySelect.style.display = isBuy ? 'none' : 'block';
-                drawerDescriptionLabel.style.display = isBuy ? 'none' : 'block';
-                drawerDescriptionInput.style.display = isBuy ? 'none' : 'block';
-                drawerImageLabel.style.display = isBuy ? 'none' : 'block';
-                drawerImageInput.style.display = isBuy ? 'none' : 'block';
-                drawerActionBtn.textContent = isBuy ? 'Add Mock Item to Cart' : 'Post & Add to Cart';
-                drawerActionBtn.setAttribute('data-action', type);
-
-                drawerOverlay.classList.add('visible');
-                drawer.classList.add('visible');
-                document.body.style.overflow = 'hidden'; // Prevent background scrolling
-            }
-
-            window.closeDrawer = function() {
-                drawerOverlay.classList.remove('visible');
-                drawer.classList.remove('visible');
-                document.body.style.overflow = '';
-                document.getElementById('drawerName').value = '';
-                document.getElementById('drawerQty').value = '';
-                drawerPriceInput.value = '';
-                drawerCategorySelect.value = '';
-                drawerDescriptionInput.value = '';
-                drawerImageInput.value = '';
-                drawerImageDataUrl = '';
-                drawerImagePreview.style.display = 'none';
-                drawerImagePreview.src = '';
-            }
-            
-            
-            document.getElementById('openQuickSell').addEventListener('click', () => openDrawer('sell'));
-            document.getElementById('openQuickBuy').addEventListener('click', () => openDrawer('buy'));
-
-            
-            drawerActionBtn.addEventListener('click', function() {
-                const name = document.getElementById('drawerName').value.trim();
-                const qty = document.getElementById('drawerQty').value;
-                const type = this.getAttribute('data-action');
-                
-                if (!name || isNaN(qty) || parseInt(qty) <= 0) {
-                    showToast("Please enter a valid product name and quantity.", false);
-                    return;
-                }
-
-                if (type === 'sell') {
-                    const price = document.getElementById('drawerPrice').value;
-                    const category = drawerCategorySelect.value;
-                    if (isNaN(price) || parseFloat(price) <= 0) {
-                        showToast("Please enter a valid price to sell.", false);
-                        return;
-                    }
-                    if (!ALLOWED_PRODUCT_CATEGORIES.includes(category)) {
-                        showToast(translations[currentLang]['toast-error-category'], false);
-                        return;
-                    }
-                    if (!drawerImageDataUrl) {
-                        showToast(translations[currentLang]['toast-error-image'], false);
-                        return;
-                    }
-                    const description = drawerDescriptionInput.value.trim();
-                    addProductListing(name, qty, price, drawerImageDataUrl, category, description);
-                } else {
-                    const price = 100; // Default price for mock buy
-                    addToCart(name, qty, price);
-                }
-
-                closeDrawer();
-            });
-        });
+           
