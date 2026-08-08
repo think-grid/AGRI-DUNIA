@@ -126,6 +126,7 @@
 
     <nav class="navbar">
         <a href="#marketplace" class="nav-link active" data-target="marketplace" data-key="nav-market" aria-label="Go to Digital Marketplace section"><i class="fas fa-store"></i> Marketplace</a>
+        <a href="#myproducts" class="nav-link farmer-only" data-target="myproducts" data-key="nav-myproducts" aria-label="Go to My Products section"><i class="fas fa-boxes-stacked"></i> My Products</a>
         <a href="#learning" class="nav-link" data-target="learning" data-key="nav-learning" aria-label="Go to Learning Hub section"><i class="fas fa-graduation-cap"></i> Learning Hub</a>
         <a href="#videos" class="nav-link" data-target="videos" data-key="nav-videos" aria-label="Go to Videos for Farmers section"><i class="fas fa-video"></i> Videos</a>
         <a href="#schemes" class="nav-link" data-target="schemes" data-key="nav-schemes" aria-label="Go to Government Schemes section"><i class="fas fa-hands-helping"></i> Schemes</a>
@@ -175,12 +176,6 @@
             </div>
             <!-- END  QUICK BUY/SELL BUTTONS will be -->
 
-            <!-- FARMER: My Product Listings -->
-            <div id="myListingsSection" class="farmer-only listings-panel">
-                <h2><i class="fas fa-list"></i> My Product Listings</h2>
-                <div id="myListingsItems"><p>You haven't listed any products yet.</p></div>
-            </div>
-
             <!-- BUYER: Available Products from Farmers -->
             <div id="availableProductsSection" class="buyer-only listings-panel">
                 <h2><i class="fas fa-store"></i> Products Available to Buy</h2>
@@ -190,6 +185,22 @@
             <div id="cartSection" style="margin-top:30px; padding:20px; border-radius:8px;">
                 <h2 data-key="cart-title">Your Cart</h2>
                 <div id="cartItems"><p data-key="cart-empty">Your cart is empty.</p></div>
+            </div>
+        </section>
+
+        <!-- My Products Section (Farmer only) -->
+        <section id="myproducts">
+            <div class="section-header">
+                <h2 data-key="sec-myproducts-title">My Products</h2>
+                <div class="tooltip-container">
+                    <button class="tts-button" data-content-id="myproducts" aria-label="Read this section aloud"><i class="fas fa-volume-up"></i></button>
+                    <span class="tooltip-text">Text-to-Speech</span>
+                </div>
+            </div>
+            <p data-key="sec-myproducts-p">Manage the products you've listed for sale — buyers can see and purchase these directly from the marketplace.</p>
+
+            <div id="myListingsSection" class="listings-panel">
+                <div id="myListingsItems"><p>You haven't listed any products yet.</p></div>
             </div>
         </section>
 
@@ -240,7 +251,7 @@
                     <div id="chatHistory" style="text-align: left; padding: 10px; min-height: 200px; max-height: 300px; overflow-y: auto; background: var(--color-background); border-radius: 8px; border: 1px solid var(--color-card-border);">
                         <div class="chat-message ai"><div class="message-bubble">Hello! I'm Agri-Gemini, your AI crop expert. Ask me anything about farming techniques, pests, or market advice.</div></div>
                     </div>
-                    <input type="text" id="chatInput" placeholder="Ask your question here..." style="width: 100%; padding: 12px; margin-top: 15px; border-radius: 6px; border: 1px solid var(--color-card-border); background: var(--color-card-bg); color: var(--color-text);">
+                    <input type="text" id="chatInput" placeholder="Ask your question here..." style="width: 100%; padding: 12px; margin-top: 15px; border-radius: 6px; border: 1px solid var(--color-card-border); background: var(--color-card-bg); color: var(--color-text); font-size: 16px;">
                     <button id="sendChatBtn" style="margin-top: 10px; padding: 12px; width: 100%; background: var(--color-accent); color: var(--color-text); font-weight: 700; border: none; border-radius: 6px; transition: background 0.3s;">
                         Get Advice ✨
                     </button>
