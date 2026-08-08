@@ -1081,6 +1081,25 @@
             margin-bottom: 15px;
             display: block;
         }
+
+        /* About Us feature cards — same visual language as learning cards, no click target */
+        .about-card {
+            background: var(--color-card-bg);
+            border: 1px solid var(--color-card-border);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 10px var(--color-shadow);
+        }
+        .about-card i {
+            color: var(--color-accent);
+            font-size: 2em;
+            margin-bottom: 15px;
+            display: block;
+        }
+        .about-card h4 {
+            margin: 0 0 8px;
+            color: var(--color-primary);
+        }
         
         #ai-recommendation {
             background: var(--color-primary);
@@ -1783,5 +1802,312 @@
                 width: 48px;
                 height: 48px;
                 font-size: 1.4em;
+            }
+        }
+        /* ============================================================
+           ABOUT US — redesigned section (au- prefix, self-contained)
+           ============================================================ */
+
+        /* Hero */
+        .au-hero {
+            max-width: 780px;
+            margin: 4px 0 8px;
+        }
+        .au-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--color-secondary);
+            font-weight: 600;
+            font-size: 0.82em;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 12px;
+        }
+        .au-headline {
+            font-size: 2em;
+            font-weight: 700;
+            color: var(--color-primary);
+            line-height: 1.25;
+            margin: 0 0 16px;
+            border: none;
+            padding: 0;
+        }
+        .au-intro {
+            font-size: 1.02em;
+            line-height: 1.8;
+            color: var(--color-text);
+            margin: 0;
+        }
+
+        /* Shared block heading */
+        .au-block {
+            margin-top: 46px;
+        }
+        .au-block-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.3em;
+            font-weight: 700;
+            color: var(--color-primary);
+            margin: 0 0 20px;
+        }
+        .au-block-title::before {
+            content: "";
+            width: 6px;
+            height: 24px;
+            border-radius: 3px;
+            background: var(--color-secondary);
+            display: inline-block;
+            flex-shrink: 0;
+        }
+
+        /* What We Do — card grid */
+        .au-grid {
+            display: grid;
+            gap: 20px;
+        }
+        .au-grid-4 {
+            grid-template-columns: repeat(4, 1fr);
+        }
+        .au-card {
+            background: var(--color-card-bg);
+            border: 1px solid var(--color-card-border);
+            border-radius: 14px;
+            padding: 24px 20px;
+            box-shadow: 0 4px 12px var(--color-shadow);
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+        .au-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 22px var(--color-shadow);
+        }
+        .au-icon-chip {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: rgba(56, 142, 60, 0.1);
+            color: var(--color-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3em;
+            margin-bottom: 16px;
+        }
+        .au-card h4 {
+            margin: 0 0 8px;
+            color: var(--color-primary);
+            font-size: 1.05em;
+        }
+        .au-card p {
+            margin: 0;
+            font-size: 0.92em;
+            line-height: 1.6;
+            color: var(--color-text);
+        }
+
+        /* How We Work — flow */
+        .au-flow {
+            display: flex;
+            align-items: stretch;
+            gap: 4px;
+        }
+        .au-flow-step {
+            flex: 1 1 0;
+            background: var(--color-background);
+            border: 1px solid var(--color-card-border);
+            border-radius: 14px;
+            padding: 22px 16px;
+            text-align: center;
+        }
+        .au-flow-icon {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            background: var(--color-primary);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1em;
+            margin: 0 auto 14px;
+        }
+        .au-flow-step h4 {
+            margin: 0 0 6px;
+            color: var(--color-primary);
+            font-size: 0.98em;
+        }
+        .au-flow-step p {
+            margin: 0;
+            font-size: 0.85em;
+            line-height: 1.5;
+            color: var(--color-text);
+        }
+        .au-flow-arrow {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 6px;
+            color: var(--color-secondary);
+            font-size: 1.3em;
+        }
+
+        /* Beyond the Marketplace */
+        .au-beyond-intro {
+            max-width: 760px;
+            color: var(--color-text);
+            line-height: 1.8;
+            margin: 0 0 24px;
+        }
+        .au-beyond-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 28px;
+            align-items: start;
+        }
+        .au-checklist {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 14px 22px;
+        }
+        .au-checklist li {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            font-size: 0.95em;
+            line-height: 1.45;
+            color: var(--color-text);
+        }
+        .au-checklist li i {
+            flex-shrink: 0;
+            width: 20px;
+            height: 20px;
+            margin-top: 2px;
+            border-radius: 50%;
+            background: rgba(56, 142, 60, 0.12);
+            color: var(--color-primary);
+            font-size: 0.7em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .au-beyond-note {
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+            background: var(--color-background);
+            border-left: 4px solid var(--color-secondary);
+            border-radius: 10px;
+            padding: 20px 22px;
+        }
+        .au-beyond-note i {
+            color: var(--color-primary);
+            font-size: 1.3em;
+            margin-top: 2px;
+        }
+        .au-beyond-note p {
+            margin: 0;
+            font-size: 0.92em;
+            line-height: 1.65;
+            color: var(--color-text);
+        }
+
+        /* Vision */
+        .au-vision {
+            margin-top: 46px;
+            background: var(--color-primary);
+            color: #fff;
+            border-radius: 16px;
+            padding: 42px 30px;
+            text-align: center;
+        }
+        .au-vision-icon {
+            display: block;
+            font-size: 1.9em;
+            color: #c8e6c9;
+            margin-bottom: 14px;
+        }
+        .au-vision h3 {
+            margin: 0 0 12px;
+            color: #fff;
+            font-size: 1.4em;
+            border: none;
+            padding: 0;
+        }
+        .au-vision p {
+            margin: 0 auto;
+            max-width: 640px;
+            color: #e8f5e9;
+            line-height: 1.75;
+        }
+
+        /* Closing CTA */
+        .au-cta {
+            margin-top: 40px;
+            text-align: center;
+        }
+        .au-cta h3 {
+            margin: 0 0 20px;
+            color: var(--color-primary);
+            font-size: 1.25em;
+            font-weight: 600;
+            border: none;
+            padding: 0;
+        }
+        .au-cta-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--color-primary);
+            color: #fff;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 14px 32px;
+            border-radius: 50px;
+            box-shadow: 0 6px 16px var(--color-shadow);
+            transition: background 0.25s ease, transform 0.25s ease;
+        }
+        .au-cta-btn:hover {
+            background: var(--color-secondary);
+            transform: translateY(-2px);
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .au-grid-4 {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        @media (max-width: 768px) {
+            .au-beyond-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media (max-width: 600px) {
+            .au-headline {
+                font-size: 1.55em;
+            }
+            .au-flow {
+                flex-direction: column;
+            }
+            .au-flow-arrow {
+                transform: rotate(90deg);
+                padding: 4px 0;
+            }
+            .au-checklist {
+                grid-template-columns: 1fr;
+            }
+            .au-vision {
+                padding: 32px 20px;
+            }
+        }
+        @media (max-width: 480px) {
+            .au-grid-4 {
+                grid-template-columns: 1fr;
             }
         }
