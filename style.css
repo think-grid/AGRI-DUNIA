@@ -434,6 +434,16 @@
         body.role-buyer a.nav-link.buyer-only {
             display: flex;
         }
+        /* The plain .nav-link rule further down this file also sets
+           display:flex with the same specificity as .farmer-only/.buyer-only
+           above, and — because it's declared later — was winning the
+           cascade and showing every pill to every role. Force the
+           wrong-role pill to hide, regardless of source order elsewhere
+           in the stylesheet. */
+        body.role-farmer a.nav-link.buyer-only,
+        body.role-buyer a.nav-link.farmer-only {
+            display: none !important;
+        }
 
         /* ========================================= */
         /* PRODUCT LISTINGS PANEL (My Listings / Available Products) */
