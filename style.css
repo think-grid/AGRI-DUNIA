@@ -704,11 +704,28 @@
             top: 0;
             z-index: 1000;
             display: flex;
-            justify-content: center;
             background: var(--color-navbar-bg);
             box-shadow: 0 2px 4px var(--color-shadow);
-            flex-wrap: wrap;
             padding: 0;
+            /* "Scroll wheel" behavior: a single non-wrapping row you drag/swipe
+               through, with each pill snapping to the center as it settles. */
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scroll-snap-type: x proximity;
+            -webkit-overflow-scrolling: touch;
+            scroll-behavior: smooth;
+            cursor: grab;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+        .navbar::-webkit-scrollbar {
+            display: none;
+        }
+        .navbar.wheel-dragging {
+            cursor: grabbing;
+            scroll-behavior: auto;
+            scroll-snap-type: none;
         }
 
         .nav-link {
@@ -719,8 +736,11 @@
             align-items: center;
             gap: 8px;
             font-weight: 600;
-            transition: background var(--transition-speed), color var(--transition-speed);
+            transition: background var(--transition-speed), color var(--transition-speed), transform 0.2s ease, opacity 0.2s ease;
             position: relative;
+            flex: 0 0 auto;
+            white-space: nowrap;
+            scroll-snap-align: center;
         }
 
         .nav-link:hover, .nav-link.active {
@@ -1397,8 +1417,9 @@
                 --drawer-width: 100%;
             }
             .navbar {
-                justify-content: space-between;
-                padding: 0 10px;
+                /* Horizontal centering padding is now computed by JS (setupNavWheel)
+                   so the pills can snap to the middle of the wheel on any screen
+                   width — a fixed CSS padding here would fight with that. */
             }
             .nav-link {
                 padding: 10px 10px;
