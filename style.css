@@ -2077,6 +2077,58 @@
             transform: translateY(-2px);
         }
 
+        /* Follow Us */
+        .au-social {
+            margin-top: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 20px;
+            background: var(--color-card-bg);
+            border: 1px solid var(--color-card-border);
+            border-radius: 16px;
+            padding: 26px 30px;
+            box-shadow: 0 4px 12px var(--color-shadow);
+        }
+        .au-social-text {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .au-social-text > i {
+            font-size: 2.2em;
+            color: var(--color-primary);
+            flex-shrink: 0;
+        }
+        .au-social-text h4 {
+            margin: 0 0 4px;
+            color: var(--color-primary);
+            font-size: 1.05em;
+        }
+        .au-social-text p {
+            margin: 0;
+            font-size: 0.9em;
+            color: var(--color-text);
+        }
+        .au-social-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--color-primary);
+            color: #fff;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 12px 26px;
+            border-radius: 50px;
+            white-space: nowrap;
+            transition: background 0.25s ease, transform 0.25s ease;
+        }
+        .au-social-btn:hover {
+            background: var(--color-secondary);
+            transform: translateY(-2px);
+        }
+
         /* Responsive */
         @media (max-width: 900px) {
             .au-grid-4 {
@@ -2104,6 +2156,14 @@
             }
             .au-vision {
                 padding: 32px 20px;
+            }
+            .au-social {
+                flex-direction: column;
+                text-align: center;
+                padding: 24px 20px;
+            }
+            .au-social-text {
+                flex-direction: column;
             }
         }
         @media (max-width: 480px) {
