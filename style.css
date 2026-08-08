@@ -485,6 +485,9 @@
             margin: 10px 0 6px;
             color: var(--color-text);
         }
+        .sell-image-label.description-label {
+            font-size: 1.15em;
+        }
         .product-image-preview {
             display: block;
             width: 100%;
@@ -956,7 +959,7 @@
             color: var(--color-primary);
             margin: 16px 0 6px;
         }
-        .market-form input, .market-form select, .market-form button {
+        .market-form input, .market-form select, .market-form button, .market-form textarea {
             display: block;
             width: 100%;
             margin: 10px 0 0;
@@ -964,15 +967,21 @@
             border-radius: 8px;
             border: 1.5px solid var(--color-card-border);
             font-size: 15px;
+            font-family: inherit;
             background: var(--color-background);
             color: var(--color-text);
             box-sizing: border-box;
             transition: border-color 0.2s, box-shadow 0.2s;
         }
-        .market-form input:focus, .market-form select:focus {
+        .market-form input:focus, .market-form select:focus, .market-form textarea:focus {
             outline: none;
             border-color: var(--color-primary);
             box-shadow: 0 0 0 3px rgba(56, 142, 60, 0.15);
+        }
+        .market-form textarea#sellDescription,
+        .market-form textarea#drawerDescription {
+            font-size: 1.15em;
+            resize: vertical;
         }
         .market-form button {
             background: var(--color-primary);
