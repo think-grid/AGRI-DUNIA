@@ -1511,6 +1511,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                 });
             });
             const langToggle = document.getElementById('langToggle');
+            const langMenu = document.getElementById('langMenu');
             const translations = {
                 'en': {
                     'header-title': 'AGRI DUNIYA',
@@ -1787,5 +1788,59 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     'sec-market-p': 'விவசாய பொருட்களை நேரடியாக வாங்கவும் விற்கவும். விவசாயிகள் தங்கள் பயிர்களை பட்டியலிடலாம், வாங்குபவர்கள் நேரடியாக வாங்கலாம், இது நியாயமான வர்த்தகத்தை உறுதி செய்யும்.',
                     'sec-myproducts-title': 'எனது பொருட்கள்',
                     'sec-myproducts-p': 'நீங்கள் விற்பனைக்கு பட்டியலிட்ட பொருட்களை நிர்வகிக்கவும் — வாங்குபவர்கள் இவற்றை சந்தையில் நேரடியாகக் காணலாம் மற்றும் வாங்கலாம்.',
-                    'sell-title': 'உங்கள் பொருட்களை விற்கவும்',
-           
+                    'sell-title': 'உங்கள் பொருட்களை விற்கவும்'
+                }
+            };
+
+            // --- Language switcher ---
+            // NOTE: this block was missing from the file (it was cut off here) and has
+            // been reconstructed from scratch, reusing the existing SUPPORTED_LANGS /
+            // LANG_LABELS constants (declared earlier in this file) and the langToggle /
+            // langMenu / data-key elements already present in index.html.
+            // It was not part of the original recovered code.
+            //
+            // IMPORTANT: the `translations` object above only has full UI strings for
+            // 'en', 'hi', and 'ta' (and 'ta' may itself be incomplete, since the file
+            // was cut off partway through it). 'te' and 'bn' are listed in
+            // SUPPORTED_LANGS/LANG_LABELS but have NO entries in `translations`, so
+            // switching to Telugu or Bengali will currently fall back to English text.
+            function applyLanguage(lang) {
+                const dict = translations[lang] || translations['en'];
+                document.querySelectorAll('[data-key]').forEach(el => {
+                    const key = el.getAttribute('data-key');
+                    if (dict[key] !== undefined) {
+                        el.textContent = dict[key];
+                    }
+                });
+                currentLang = lang;
+                langToggle.textContent = lang.toUpperCase();
+                localStorage.setItem('agriLang', lang);
+                langMenu.querySelectorAll('.lang-menu-item').forEach(el => {
+                    el.classList.toggle('active', el.dataset.lang === lang);
+                });
+            }
+
+            if (langToggle && langMenu) {
+                SUPPORTED_LANGS.forEach(lang => {
+                    const item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = 'lang-menu-item';
+                    item.dataset.lang = lang;
+                    item.textContent = LANG_LABELS[lang] || lang.toUpperCase();
+                    item.addEventListener('click', () => {
+                        applyLanguage(lang);
+                        langMenu.classList.remove('open');
+                    });
+                    langMenu.appendChild(item);
+                });
+
+                langToggle.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    langMenu.classList.toggle('open');
+                });
+                document.addEventListener('click', () => langMenu.classList.remove('open'));
+
+                const savedLang = localStorage.getItem('agriLang') || 'en';
+                applyLanguage(savedLang);
+            }
+        });
