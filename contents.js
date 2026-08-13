@@ -583,26 +583,26 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
             }
 
             async function addProductListing(name, qty, price, imageDataUrl, category, description = '') {
-                if (!currentUser || currentUser.role !== 'farmer') return;
+                if (!currentUser || currentUser.role !== 'farmer') return false;
                 if (!name || isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
                     showToast(translations[currentLang]['toast-error-fields'], false);
-                    return;
+                    return false;
                 }
                 if (!ALLOWED_PRODUCT_CATEGORIES.includes(category)) {
                     showToast(translations[currentLang]['toast-error-category'], false);
-                    return;
+                    return false;
                 }
                 if (!imageDataUrl) {
                     showToast(translations[currentLang]['toast-error-image'], false);
-                    return;
+                    return false;
                 }
                 if (typeof window.fbAddProduct !== 'function') {
                     showToast('Marketplace sync is unavailable right now — please try again in a moment.', false);
-                    return;
+                    return false;
                 }
                 if (!navigator.onLine) {
                     showToast('You appear to be offline. Reconnect and try again.', false);
-                    return;
+                    return false;
                 }
                 try {
                     await window.fbAddProduct({
@@ -619,6 +619,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     // onSnapshot listener in firebase.js will fire onProductsUpdated
                     // for this browser (and every other logged-in account) shortly.
                     showToast(`${name} has been listed for sale!`, true);
+                    return true;
                 } catch (err) {
                     // Surface *why* it failed instead of a one-size-fits-all message —
                     // "permission-denied" (Firestore security rules blocking writes)
@@ -628,6 +629,7 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     // wrong direction (looks like a network problem, isn't one).
                     console.error('Failed to add product listing:', err);
                     showToast(describeFirestoreWriteError(err, 'Could not publish your listing. Please try again.'), false);
+                    return false;
                 }
             };
 
@@ -1510,6 +1512,146 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     speakText(button, content);
                 });
             });
+            // LEARNING HUB — "tap to see easy guide" cards open the notebook-style modal
+            const TOPIC_GUIDES = {
+                irrigation: { emoji: '💧', diagram: '🚰 → 💧 → 🌱' },
+                organic:    { emoji: '🌿', diagram: '🍂 → 🪱 → 🌾' },
+                insurance:  { emoji: '📄', diagram: '🌾 → 📄 → 💰' },
+                cloud:      { emoji: '☁️', diagram: '📱 → ☁️ → 📊' }
+            };
+            const TOPIC_COURSE_INDEX = { irrigation: 1, organic: 2, insurance: 3, cloud: 4 };
+
+            const techniqueOverlay = document.getElementById('techniqueOverlay');
+            const techniqueModal = document.getElementById('techniqueModal');
+
+            function openTechniqueModal(topic) {
+                const guide = TOPIC_GUIDES[topic];
+                const courseNum = TOPIC_COURSE_INDEX[topic];
+                if (!guide || !courseNum || !techniqueModal || !techniqueOverlay) return;
+
+                document.getElementById('techniqueEmoji').textContent = guide.emoji;
+                document.getElementById('techniqueModalTitle').textContent = t(`course-${courseNum}-title`);
+                document.getElementById('techniqueDiagram').textContent = guide.diagram;
+
+                const stepsEl = document.getElementById('techniqueSteps');
+                stepsEl.innerHTML = '';
+                for (let i = 1; i <= 4; i++) {
+                    const stepText = t(`guide-${topic}-step-${i}`);
+                    if (!stepText) continue;
+                    const stepDiv = document.createElement('div');
+                    stepDiv.textContent = `${i}. ${stepText}`;
+                    stepsEl.appendChild(stepDiv);
+                }
+
+                document.getElementById('techniqueTip').textContent = t(`guide-${topic}-tip`);
+                techniqueModal.dataset.topic = topic;
+
+                techniqueOverlay.classList.add('visible');
+                techniqueModal.classList.add('visible');
+                document.body.style.overflow = 'hidden';
+            }
+
+            window.closeTechniqueModal = function () {
+                if (!techniqueModal || !techniqueOverlay) return;
+                techniqueOverlay.classList.remove('visible');
+                techniqueModal.classList.remove('visible');
+                document.body.style.overflow = '';
+                if (audioEl && !audioEl.paused && document.getElementById('techniqueListenBtn')?.classList.contains('speaking')) {
+                    stopPlayback();
+                }
+            };
+
+            document.querySelectorAll('.learning-card').forEach(card => {
+                card.addEventListener('click', () => openTechniqueModal(card.getAttribute('data-topic')));
+                card.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openTechniqueModal(card.getAttribute('data-topic'));
+                    }
+                });
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && techniqueModal && techniqueModal.classList.contains('visible')) {
+                    closeTechniqueModal();
+                }
+            });
+
+            const techniqueListenBtn = document.getElementById('techniqueListenBtn');
+            if (techniqueListenBtn) {
+                techniqueListenBtn.addEventListener('click', () => {
+                    if (techniqueListenBtn.classList.contains('speaking')) {
+                        stopPlayback();
+                        return;
+                    } else if (!audioEl.paused) {
+                        stopPlayback();
+                    }
+                    const parts = [
+                        document.getElementById('techniqueModalTitle').textContent,
+                        document.getElementById('techniqueTip').textContent
+                    ];
+                    document.querySelectorAll('#techniqueSteps > div').forEach(el => parts.push(el.textContent));
+                    speakText(techniqueListenBtn, parts.join('. '));
+                });
+            }
+
+            // SELL YOUR PRODUCTS — image select/preview + Post for Sale submit.
+            // (These fields existed in the HTML but had no listeners at all, so
+            // choosing a photo never showed a preview and the button did nothing.)
+            const sellImageInput = document.getElementById('sellImage');
+            const sellImagePreview = document.getElementById('sellImagePreview');
+            const postForSaleBtn = document.getElementById('postForSaleBtn');
+            let sellImageDataUrl = null;
+
+            if (sellImageInput) {
+                sellImageInput.addEventListener('change', async () => {
+                    const file = sellImageInput.files[0];
+                    if (!file) return;
+                    sellImagePreview.style.display = 'none';
+                    try {
+                        sellImageDataUrl = await compressImageFile(file);
+                        sellImagePreview.src = sellImageDataUrl;
+                        sellImagePreview.style.display = 'block';
+                    } catch (err) {
+                        console.error('Failed to process product photo:', err);
+                        sellImageDataUrl = null;
+                        showToast(err.message || 'Could not process that photo. Try a different one.', false);
+                        sellImageInput.value = '';
+                    }
+                });
+            }
+
+            if (postForSaleBtn) {
+                postForSaleBtn.addEventListener('click', async () => {
+                    postForSaleBtn.disabled = true;
+                    const originalLabel = postForSaleBtn.innerHTML;
+                    postForSaleBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                    try {
+                        const category = document.getElementById('sellCategory').value;
+                        const name = document.getElementById('sellName').value.trim();
+                        const qty = parseFloat(document.getElementById('sellQty').value);
+                        const price = parseFloat(document.getElementById('sellPrice').value);
+                        const description = document.getElementById('sellDescription').value;
+
+                        const ok = await addProductListing(name, qty, price, sellImageDataUrl, category, description);
+                        if (ok) {
+                            document.getElementById('sellCategory').value = '';
+                            document.getElementById('sellName').value = '';
+                            document.getElementById('sellQty').value = '';
+                            document.getElementById('sellPrice').value = '';
+                            document.getElementById('sellDescription').value = '';
+                            sellImageInput.value = '';
+                            sellImageDataUrl = null;
+                            sellImagePreview.style.display = 'none';
+                            sellImagePreview.src = '';
+                        }
+                    } finally {
+                        postForSaleBtn.disabled = false;
+                        postForSaleBtn.innerHTML = originalLabel;
+                    }
+                });
+            }
+
             const langToggle = document.getElementById('langToggle');
             const langMenu = document.getElementById('langMenu');
             const translations = {
@@ -1547,6 +1689,26 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     'course-3-desc': 'Understand policy details and claims process for securing your harvest against risks.',
                     'course-4-title': 'Cloud Integration & e-Learning',
                     'course-4-desc': 'Utilize cloud tools for data management and access to digital agricultural resources.',
+                    'guide-irrigation-step-1': 'Check soil moisture with a finger test before watering.',
+                    'guide-irrigation-step-2': 'Use drip lines for row crops, sprinklers for open fields.',
+                    'guide-irrigation-step-3': 'Water early morning or evening to reduce evaporation loss.',
+                    'guide-irrigation-step-4': 'Inspect emitters and nozzles weekly for clogs or leaks.',
+                    'guide-irrigation-tip': '💡 A quick soil check beats watering on a fixed calendar.',
+                    'guide-organic-step-1': 'Build compost from crop waste, dung, and kitchen scraps.',
+                    'guide-organic-step-2': 'Rotate crops each season to keep the soil naturally healthy.',
+                    'guide-organic-step-3': 'Use neem oil and companion planting instead of chemical sprays.',
+                    'guide-organic-step-4': 'Apply for certification once fields stay chemical-free long enough.',
+                    'guide-organic-tip': '💡 Healthy soil is the real fertilizer — feed it, don\'t just feed the plant.',
+                    'guide-insurance-step-1': 'Enroll before the season\'s enrollment deadline.',
+                    'guide-insurance-step-2': 'Keep proof of sowing date and area on record.',
+                    'guide-insurance-step-3': 'Report any crop loss to your insurer within the claim window.',
+                    'guide-insurance-step-4': 'Follow up with your local agriculture office if you don\'t hear back.',
+                    'guide-insurance-tip': '💡 Photograph your field right after sowing — it speeds up claims later.',
+                    'guide-cloud-step-1': 'Create an account on a trusted e-krishi or farm-data portal.',
+                    'guide-cloud-step-2': 'Upload your farm and harvest records regularly.',
+                    'guide-cloud-step-3': 'Turn on weather and market-price alerts for your crops.',
+                    'guide-cloud-step-4': 'Keep a backup of land and purchase documents as photos.',
+                    'guide-cloud-tip': '💡 A synced record beats a lost paper receipt every time.',
                     'ai-chat-title': '✨ Agri-Gemini: Instant Crop Advisor',
                     'ai-desc': 'Ask me anything about farming techniques, market trends, or pest management!',
                     'sec-video-title': 'Videos for Farmers',
@@ -1678,6 +1840,26 @@ const GOOGLE_CLIENT_ID = "1007423755384-j0q27cdejbiqbv8cjtifmnr9e29jajkv.apps.go
                     'course-3-desc': 'जोखिमों के विरुद्ध अपनी फसल को सुरक्षित करने के लिए नीति विवरण और दावा प्रक्रिया को समझें।',
                     'course-4-title': 'क्लाउड एकीकरण और ई-लर्निंग',
                     'course-4-desc': 'डेटा प्रबंधन और डिजिटल कृषि संसाधनों तक पहुँच के लिए क्लाउड उपकरणों का उपयोग करें।',
+                    'guide-irrigation-step-1': 'पानी देने से पहले उंगली से मिट्टी की नमी जाँचें।',
+                    'guide-irrigation-step-2': 'कतार वाली फसलों के लिए ड्रिप और खुले खेतों के लिए स्प्रिंकलर उपयोग करें।',
+                    'guide-irrigation-step-3': 'वाष्पीकरण कम करने के लिए सुबह जल्दी या शाम को पानी दें।',
+                    'guide-irrigation-step-4': 'हर हफ्ते एमिटर और नोज़ल में रुकावट या रिसाव जाँचें।',
+                    'guide-irrigation-tip': '💡 तय समय-सारणी से ज़्यादा भरोसेमंद है मिट्टी की जल्दी जाँच।',
+                    'guide-organic-step-1': 'फसल अवशेष, गोबर और रसोई कचरे से खाद बनाएं।',
+                    'guide-organic-step-2': 'मिट्टी स्वस्थ रखने के लिए हर मौसम में फसल बदलें।',
+                    'guide-organic-step-3': 'रासायनिक छिड़काव की जगह नीम तेल और साथी-रोपण अपनाएं।',
+                    'guide-organic-step-4': 'खेत पर्याप्त समय तक रसायन-मुक्त रहने पर प्रमाणीकरण के लिए आवेदन करें।',
+                    'guide-organic-tip': '💡 असली खाद स्वस्थ मिट्टी है — पौधे के साथ मिट्टी को भी पोषण दें।',
+                    'guide-insurance-step-1': 'सीज़न की नामांकन अंतिम तिथि से पहले नामांकन करें।',
+                    'guide-insurance-step-2': 'बुवाई की तारीख और क्षेत्रफल का प्रमाण रखें।',
+                    'guide-insurance-step-3': 'फसल नुकसान की सूचना दावा अवधि के भीतर बीमा कंपनी को दें।',
+                    'guide-insurance-step-4': 'जवाब न मिलने पर स्थानीय कृषि कार्यालय से संपर्क करें।',
+                    'guide-insurance-tip': '💡 बुवाई के तुरंत बाद खेत की फोटो लें — इससे दावा जल्दी होता है।',
+                    'guide-cloud-step-1': 'किसी भरोसेमंद ई-कृषि या फार्म-डेटा पोर्टल पर खाता बनाएं।',
+                    'guide-cloud-step-2': 'अपने खेत और फसल के रिकॉर्ड नियमित रूप से अपलोड करें।',
+                    'guide-cloud-step-3': 'अपनी फसलों के लिए मौसम और बाज़ार-भाव अलर्ट चालू करें।',
+                    'guide-cloud-step-4': 'ज़मीन और खरीद के दस्तावेज़ों की फोटो बैकअप रखें।',
+                    'guide-cloud-tip': '💡 खोई हुई रसीद से बेहतर है सिंक किया हुआ रिकॉर्ड।',
                     'ai-chat-title': '✨ एग्री-जेमिनी: तत्काल फसल सलाहकार',
                     'ai-desc': 'खेती की तकनीकों, बाज़ार के रुझानों या कीट प्रबंधन के बारे में कुछ भी पूछें!',
                     'sec-video-title': 'किसानों के लिए वीडियो',
